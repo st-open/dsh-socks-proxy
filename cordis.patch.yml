@@ -1,5 +1,5 @@
 # SOCKS5 outbound proxy for DSH. Override `config` from your profile's
-# cordis.patch.yml with an entry `- id: socks-proxy` (see README.zh.md).
+# cordis.patch.yml with an entry `- id: socks-proxy` (see README.md).
 - insert:
     - id: socks-proxy
       name: '@st-open/dsh-socks-proxy'

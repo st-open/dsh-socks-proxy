@@ -21,9 +21,9 @@
     "locale/*.json",
     "icon.svg",
     "cordis.patch.yml",
-    "README.zh.md",
     "docs/*.svg",
     "README.md",
+    "README.en.md",
     "LICENSE"
   ],
   "engines": {

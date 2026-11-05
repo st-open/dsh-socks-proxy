@@ -1,53 +1,56 @@
-# Proxy (SOCKS5 / HTTP)
+# 代理（SOCKS5 / HTTP）
 
-![Preview (illustration, not a screenshot)](docs/preview.svg)
+简体中文 | [English](README.en.md)
 
-Route DeepSeek Harness (DSH) internet traffic through a proxy. Supports **SOCKS5, HTTP, HTTPS**.
+![界面示意（非真实截图）](docs/preview.svg)
 
-## What it does
+让 DeepSeek Harness（DSH）联网时走代理。支持 **SOCKS5、HTTP、HTTPS**。
 
-Maybe your computer can reach the LLM but not GitHub/Google — or the other way round. This plugin decides **which requests use a proxy and which stay direct**.
+## 它能干什么
 
-## Three modes (pick one)
+你的电脑可能：直连打不开 GitHub、Google，但能连大模型；或者反过来。
+这个插件就是让你决定——**哪些上网请求走代理、哪些直连**。
 
-| Mode | Through the proxy | Direct |
+## 三种模式（选一个就行）
+
+| 模式 | 走代理 | 直连 |
 |---|---|---|
-| **LLM only** | LLM API requests | everything else |
-| **DSH only** | DSH's own traffic: web pages, search, terminal commands | LLM |
-| **All traffic** | everything (LLM + DSH) | nothing |
+| **仅大模型** | 大模型 API | 其它全部 |
+| **仅 DSH 本身** | 网页、搜索、终端命令等 DSH 自己的联网 | 大模型 |
+| **全部流量** | 全部（大模型 + DSH） | 无 |
 
-> In short: **All traffic = LLM only + DSH only**.
+> 一句话：**全部流量 = 仅大模型 + 仅 DSH 本身**。
 
-## Install
+## 安装
 
 ```bash
 dsh plugin --profile desktop add github:st-open/dsh-socks-proxy
 ```
 
-Restart DSH once after the first install.
+第一次安装后，重启一次 DSH。
 
-## Use (3 steps)
+## 使用（3 步）
 
-1. Open **Plugins → Proxy (SOCKS5 / HTTP)**.
-2. Paste your proxy address into **Proxy server**, e.g.:
+1. 打开 **插件 → 代理（SOCKS5 / HTTP）**。
+2. 在「代理服务器」里粘贴你的代理地址，比如：
    - `socks5h://127.0.0.1:7890`
    - `http://127.0.0.1:7897`
-   - (you can also paste `export HTTPS_PROXY=…` or `curl -x …` — it is detected automatically)
-3. Choose a mode → **Save**. It applies immediately.
+   - （也支持直接粘贴 `export HTTPS_PROXY=…`、`curl -x …` 这类文本，会自动识别）
+3. 选好模式 → 点 **保存**，立即生效。
 
-Not sure it works? Click **Test connection** first.
+不确定通不通？先点 **测试连接**。
 
-## Want "DSH via A, LLM via B"?
+## 想让「DSH 走 A、大模型走 B」？
 
-1. Mode: **All traffic**.
-2. **Proxy server**: A.
-3. Open **Advanced → Separate proxy for LLM**, fill in B.
+1. 模式选 **全部流量**；
+2. 「代理服务器」填 A；
+3. 打开 **高级设置 → 大模型走独立代理**，填 B。
 
-Example: DSH via local Clash `http://127.0.0.1:7897`, LLM via `socks5h://user:pass@10.0.0.1:1080`.
+例：DSH 走本地 Clash `http://127.0.0.1:7897`，大模型走 `socks5h://user:pass@10.0.0.1:1080`。
 
-## FAQ
+## 常见问题
 
-- **`socks5h://` vs `socks5://`?** `h` lets the proxy resolve DNS — usually more reliable, **recommended**.
-- **LAN addresses fail?** Turn off "Connect LAN addresses directly" in Advanced.
-- **Need a restart?** Saving applies immediately; only the **first install** needs one DSH restart.
-- **Wrong settings?** Click **Test connection** — it tells you which step failed (unreachable, bad login, wrong type, …).
+- **`socks5h://` 和 `socks5://` 有啥区别？** `h` 表示由代理服务器解析域名，通常更稳，**推荐**。
+- **内网/局域网地址连不上？** 到「高级设置」里关掉「局域网地址直连」。
+- **改完要重启吗？** 保存即生效；只有**第一次安装**要重启一次 DSH。
+- **填错了？** 点「测试连接」，它会告诉你卡在哪一步（连不上、账号错误、类型选错等）。
