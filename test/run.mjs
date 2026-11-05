@@ -406,6 +406,50 @@ await test('mode=dsh: DSH’s own hosts go through SOCKS5, LLM hosts stay direct
   }
 })
 
+// ---- integration: dedicated LLM upstream ----------------------------------------------------
+await test('mode=all + dedicated LLM proxy: LLM host via llmProxy, other hosts via primary', async () => {
+  const primary = await startSocks({ username: 'p', password: 'pp' })
+  const llmSrv = await startSocks({ username: 'l', password: 'll' })
+  const config = normalizeConfig({
+    mode: 'all',
+    proxy: `socks5h://p:pp@127.0.0.1:${primary.port}`,
+    llmProxyEnabled: true,
+    llmProxy: `socks5h://l:ll@127.0.0.1:${llmSrv.port}`,
+    bypassPrivate: false,
+    builtinHosts: false,
+    llmHosts: [],
+  })
+  assert.equal(config.llmProxyEnabled, true)
+  assert.ok(config.llmSocks && config.llmSocks.port === llmSrv.port)
+  const llmHosts = () => ['api.llm.test']
+  const handle = await installSocksRouting(config, { llmHosts, logger })
+  try {
+    assert.equal(handle.hasLlmUpstream, true)
+    assert.equal(handle.usesLlmUpstream(new URL('https://api.llm.test/x')), true)
+    assert.equal(handle.usesLlmUpstream(new URL('https://site.example.com/x')), false)
+    // LLM host -> LLM proxy
+    assert.equal(await (await fetch(`http://api.llm.test:${targetPort}/v1`)).text(), `hello api.llm.test:${targetPort} /v1`)
+    assert.ok(llmSrv.seen.includes(`api.llm.test:${targetPort}`), 'LLM host went through llm proxy')
+    assert.ok(!primary.seen.includes(`api.llm.test:${targetPort}`), 'LLM host NOT through primary')
+    // other host -> primary proxy
+    assert.equal(await (await fetch(`http://site.example.com:${targetPort}/s`)).text(), `hello site.example.com:${targetPort} /s`)
+    assert.ok(primary.seen.includes(`site.example.com:${targetPort}`), 'other host through primary')
+    assert.ok(!llmSrv.seen.includes(`site.example.com:${targetPort}`), 'other host NOT through llm proxy')
+  } finally {
+    await handle.dispose()
+    primary.server.close()
+    llmSrv.server.close()
+  }
+})
+
+await test('dedicated LLM proxy disabled/empty does not change routing', async () => {
+  const a = normalizeConfig({ mode: 'all', proxy: 'socks5h://127.0.0.1:7890', llmProxyEnabled: false, llmProxy: 'socks5h://127.0.0.1:1' })
+  assert.equal(a.llmProxyEnabled, false)
+  assert.equal(a.llmSocks, undefined)
+  const b = normalizeConfig({ mode: 'all', proxy: 'socks5h://127.0.0.1:7890', llmProxyEnabled: true, llmProxy: '' })
+  assert.equal(b.llmProxyEnabled, false)
+})
+
 // ---- integration: all mode -------------------------------------------------------------------
 await test('mode=all: everything through SOCKS5 except loopback/private; env + node:http covered; dispose restores', async () => {
   const s = await startSocks({ username: 'bob', password: 'pw' })

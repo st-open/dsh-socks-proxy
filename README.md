@@ -17,6 +17,24 @@ An outbound proxy plugin for **DeepSeek Harness (DSH)**: route DSH traffic throu
 
 > Relationship: `all = dsh + llm`.
 
+## Dedicated LLM proxy (two upstreams)
+
+Want **DSH through one proxy and the LLM through another** (e.g. DSH via local Clash, LLM via a SOCKS)? 
+
+- Set the primary **Proxy** to the one DSH uses (e.g. `http://127.0.0.1:7897`);
+- Advanced → enable **Separate proxy for LLM** and fill the LLM-only address (e.g. `socks5h://user:pass@10.0.0.1:1080`);
+- Choose the **All traffic** mode.
+
+Result: LLM hosts (provider endpoints from your model settings + `llmHosts`) use the LLM proxy; every other proxied host keeps the primary. The two are independent.
+
+```yaml
+    mode: all
+    proxy: http://127.0.0.1:7897
+    llmProxyEnabled: true
+    llmProxy: socks5h://user:pass@10.0.0.1:1080
+```
+
+
 Loopback (localhost / 127.x / ::1), the `bypass` list, and — with `bypassPrivate: true` — private LAN IP literals always stay direct.
 
 ## Install

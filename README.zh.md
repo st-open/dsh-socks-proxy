@@ -13,6 +13,24 @@
 
 > 关系：`all = dsh + llm`。
 
+## 大模型专用代理（两条上游）
+
+想让 **DSH 走一条代理、大模型走另一条**？例如 DSH 走本地 Clash、大模型走某个 SOCKS：
+
+- 主「代理服务器」填 DSH 用的那条（如 `http://127.0.0.1:7897`）；
+- 高级设置 →「**大模型走独立代理**」打开，填大模型专用地址（如 `socks5h://user:pass@10.0.0.1:1080`）；
+- 模式选「**全部流量**」。
+
+效果：命中大模型主机（模型设置里的 provider 地址 + `llmHosts`）走大模型专用代理，其余被代理的流量走主代理。两条各自独立、互不影响。
+
+```yaml
+    mode: all
+    proxy: http://127.0.0.1:7897
+    llmProxyEnabled: true
+    llmProxy: socks5h://user:pass@10.0.0.1:1080
+```
+
+
 始终直连：loopback（localhost / 127.x / ::1）、`bypass` 列表，以及 `bypassPrivate: true` 时的内网 IP 字面量（10.x / 172.16-31.x / 192.168.x / 169.254.x / fc00::/7 / fe80::/10）。
 
 ## 原理

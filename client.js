@@ -11,7 +11,7 @@ window.__ModuleLoader__.load({
     const PACKAGE = '@st-open/dsh-socks-proxy';
     const TEST_ROUTE = 'api/socks-proxy/test';
     /** Shown in the panel so a stale (cached) page is obvious. Keep in sync with package.json. */
-    const PANEL_VERSION = '0.8.0';
+    const PANEL_VERSION = '0.9.0';
     const NS = 'socksProxy';
     const MODES = ['off', 'llm', 'dsh', 'all'];
     const INPUT_MODES = ['url', 'fields'];
@@ -75,6 +75,11 @@ window.__ModuleLoader__.load({
       bypassHint: '逗号分隔；example.com 同时匹配子域名，“10.1.” 按 IP 前缀匹配。',
       llmHosts: '额外的大模型主机',
       llmHostsHint: '仅「仅大模型」模式使用，逗号分隔。模型设置里的接口地址已自动包含。',
+      llmProxyEnabled: '大模型走独立代理',
+      llmProxyEnabledHint: '为大模型单独指定一条代理：大模型走这条，其余流量仍走上面的主代理。适合「DSH 走 Clash、大模型走另一个代理」的场景（建议配合「全部流量」模式）。',
+      llmProxy: '大模型代理地址',
+      llmProxyHint: '与主代理同格式：socks5://、http(s):// 地址或 curl / export 命令。留空则不启用。',
+      'test.llmUpstream': '大模型代理',
       overridden: '已修改',
       reset: '恢复默认',
       readOnly: '本部署的设置为只读。',
@@ -168,6 +173,11 @@ window.__ModuleLoader__.load({
       bypassHint: 'Comma separated; example.com also matches subdomains, "10.1." matches an IPv4 prefix.',
       llmHosts: 'Extra LLM hosts',
       llmHostsHint: 'LLM-only mode, comma separated. Endpoints from your model settings are already included.',
+      llmProxyEnabled: 'Separate proxy for LLM',
+      llmProxyEnabledHint: 'Give the LLM its own proxy: LLM hosts use this one, all other traffic keeps the primary proxy above. For "DSH via Clash, LLM via another proxy" (use with All traffic mode).',
+      llmProxy: 'LLM proxy address',
+      llmProxyHint: 'Same formats as the primary: socks5://, http(s)://, or a curl / export command. Empty disables it.',
+      'test.llmUpstream': 'LLM proxy',
       overridden: 'Changed',
       reset: 'Reset',
       readOnly: 'This deployment stores settings read-only.',
@@ -339,6 +349,16 @@ window.__ModuleLoader__.load({
       boolField('bypassPrivate'),
       { field: 'bypass', format: listFormat, parse: listParse },
       { field: 'llmHosts', format: listFormat, parse: listParse },
+      { field: 'llmProxyEnabled', format: (v) => (v === 'true' || v === true ? 'true' : 'false'), parse: (text) => ({ kind: 'set', value: text === 'true' ? 'true' : 'false' }) },
+      {
+        field: 'llmProxy',
+        format: str,
+        parse: (text) => {
+          if (text.trim() === '') return { kind: 'clear' };
+          const parsed = parseProxyInput(text);
+          return parsed ? { kind: 'set', value: parsed.url } : undefined;
+        },
+      },
     ];
     const FIELD_NAMES = FIELDS.map((f) => f.field);
 
@@ -578,7 +598,12 @@ window.__ModuleLoader__.load({
           bypassPrivate: state.bypassPrivate.text !== 'false',
           bypass: state.bypass.text,
           llmHosts: state.llmHosts.text,
+          llmProxyEnabled: state.llmProxyEnabled.text === 'true',
         };
+        if (draft.llmProxyEnabled && state.llmProxy.text.trim()) {
+          const parsedLlm = parseProxyInput(state.llmProxy.text);
+          if (parsedLlm) draft.llmProxy = parsedLlm.url;
+        }
         if (inputMode === 'url') {
           const parsed = parseProxyInput(state.proxy.text);
           if (!parsed) {
@@ -639,6 +664,26 @@ window.__ModuleLoader__.load({
         }
       }
 
+      const llm = !busy && result && result.llmUpstream ? result.llmUpstream : undefined;
+      const llmStatus = llm
+        ? h('div', { className: 'dsp-status', 'data-state': llm.ok ? 'done' : 'error' }, [
+            h('span', { key: 'd', className: 'dsp-status-dot' }, h(P.StateDot, { state: llm.ok ? 'done' : 'error' })),
+            h('div', { key: 'm', className: 'dsp-status-main' }, [
+              h('span', { key: 't', className: 'dsp-status-title' }, [
+                t('test.llmUpstream'),
+                h(React.Fragment, { key: 'sp1' }, ' '),
+                h(P.Tag, { key: 'type', tone: 'neutral' }, TYPE_LABELS[llm.type] || 'SOCKS5'),
+                h(React.Fragment, { key: 'sp2' }, ' '),
+                llm.ok
+                  ? h(P.Tag, { key: 'auth', tone: 'success' }, t(llm.auth === 'password' ? 'test.auth.password' : 'test.auth.none'))
+                  : h(P.Tag, { key: 'fail', tone: 'neutral' }, shortError(t, llm.code)),
+              ]),
+              llm.ok
+                ? h('span', { key: 'meta', className: 'dsp-status-meta dsp-mono' }, `${llm.via} · ${llm.totalMs} ms`)
+                : h('span', { key: 'meta', className: 'dsp-status-meta' }, translated(t, `err.${llm.code}`, { message: llm.message }) || llm.message),
+            ]),
+          ])
+        : null;
       const endpoints = !busy && result && Array.isArray(result.endpoints) ? result.endpoints : undefined;
       const list = endpoints
         ? endpoints.length
@@ -649,7 +694,7 @@ window.__ModuleLoader__.load({
                   h(P.StateDot, { key: 'dot', state: e.ok ? 'done' : 'error', size: 8 }),
                   h('span', { key: 'route', className: 'dsp-route' }, e.route),
                   h('span', { key: 'host', className: 'dsp-host' }, `${e.host}:${e.port}`),
-                  h(P.Tag, { key: 'via', tone: e.via === 'proxy' ? 'info' : 'outline' }, e.via === 'proxy' ? t('test.via.proxy') : t('test.via.direct')),
+                  h(P.Tag, { key: 'via', tone: e.via === 'proxy' ? 'info' : 'outline' }, e.via === 'proxy' ? (e.upstream === 'llm' ? `${t('test.via.proxy')} · ${t('test.llmUpstream')}` : t('test.via.proxy')) : t('test.via.direct')),
                   h('span', { key: 'ms', className: 'dsp-ms', 'data-error': e.ok ? undefined : '' }, e.ok ? `${e.ms} ms` : shortError(t, e.code)),
                 ]),
               ),
@@ -664,6 +709,7 @@ window.__ModuleLoader__.load({
         ]),
         h('p', { key: 'hint', className: 'dsp-hint' }, t('testHint')),
         status ? h(React.Fragment, { key: 'status' }, status) : null,
+        llmStatus ? h(React.Fragment, { key: 'llmstatus' }, llmStatus) : null,
         list ? h(React.Fragment, { key: 'list' }, list) : null,
       ]);
     }
@@ -778,6 +824,15 @@ window.__ModuleLoader__.load({
               h(ToggleRow, { key: 'bp', label: t('bypassPrivate'), hint: t('bypassPrivateHint'), field: state.bypassPrivate, disabled, onChange: (checked) => edit('bypassPrivate', checked ? 'true' : 'false') }),
               h(TextRow, { key: 'bypass', ...common, name: 'bypass', field: state.bypass, placeholder: 'corp.example.com, 192.168.1.50' }),
               mode === 'llm' ? h(TextRow, { key: 'llm', ...common, name: 'llmHosts', field: state.llmHosts, placeholder: 'api.example.com' }) : null,
+              // Dedicated LLM proxy: meaningful when LLM traffic is proxied (llm + all modes).
+              (mode === 'all' || mode === 'llm')
+                ? h('div', { key: 'llmproxy', className: 'dsp-nested' }, [
+                    h(ToggleRow, { key: 'en', label: t('llmProxyEnabled'), hint: t('llmProxyEnabledHint'), field: state.llmProxyEnabled, disabled, onChange: (checked) => edit('llmProxyEnabled', checked ? 'true' : 'false') }),
+                    state.llmProxyEnabled.text === 'true'
+                      ? h(TextRow, { key: 'lp', ...common, name: 'llmProxy', field: state.llmProxy, placeholder: t('proxyPlaceholder') })
+                      : null,
+                  ])
+                : null,
             ])
           : null,
       ]);

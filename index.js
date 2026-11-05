@@ -45,6 +45,9 @@ export const Config = Schema
       bypassPrivate: Schema.boolean().default(true).volatile(),
       bypass: hostList().volatile(),
       llmHosts: hostList().volatile(),
+      // Dedicated LLM upstream (optional): LLM hosts use llmProxy; other proxied hosts keep `proxy`.
+      llmProxyEnabled: Schema.boolean().default(false).volatile(),
+      llmProxy: Schema.string().default('').volatile(),
       providers: hostList(),
       builtinHosts: Schema.boolean().default(true),
       exportToChildren: Schema.boolean().default(true),
@@ -109,6 +112,16 @@ export function apply(ctx, rawConfig) {
       const socks = await probeSocks(config.socks)
       logger.info(`socks-proxy: test ${describeUpstream(config.socks)} -> ${socks.ok ? `ok (auth ${socks.auth}, ${socks.totalMs} ms)` : `${socks.code}: ${socks.message}`}`)
       const result = { ...socks }
+      // Probe the dedicated LLM upstream as well, so the page can report it separately.
+      if (config.llmProxyEnabled && config.llmSocks) {
+        try {
+          const llm = await probeSocks(config.llmSocks)
+          result.llmUpstream = { ...llm }
+          logger.info(`socks-proxy: test llm-upstream ${describeUpstream(config.llmSocks)} -> ${llm.ok ? `ok (${llm.totalMs} ms)` : `${llm.code}: ${llm.message}`}`)
+        } catch (error) {
+          result.llmUpstream = { ok: false, code: 'internal', message: String(error?.message ?? error) }
+        }
+      }
       // Also check every configured model endpoint the way these settings would reach it.
       if (body?.checkEndpoints !== false) {
         try {
@@ -177,13 +190,14 @@ export function apply(ctx, rawConfig) {
         return
       }
       const where = describeUpstream(config.socks)
+      const llmWhere = handle.hasLlmUpstream ? `; LLM hosts via ${describeUpstream(config.llmSocks)}` : ''
       if (config.mode === 'llm') {
         const hosts = llmHosts().filter((h) => handle.shouldProxy(new URL(`https://${h.includes(':') && !h.startsWith('[') ? `[${h}]` : h}`)))
         logger.info(`socks-proxy: mode=llm via ${where}; LLM hosts now: ${hosts.join(', ') || '(none)'}`)
       } else if (config.mode === 'dsh') {
         logger.info(`socks-proxy: mode=dsh via ${where} (DSH's own traffic proxied; LLM hosts stay direct)${handle.viaDshPolicy ? ' (DSH proxy policy: web_fetch and child processes included)' : ''}`)
       } else {
-        logger.info(`socks-proxy: mode=all via ${where}${handle.viaDshPolicy ? ' (DSH proxy policy: web_fetch and child processes included)' : ''}`)
+        logger.info(`socks-proxy: mode=all via ${where}${llmWhere}${handle.viaDshPolicy ? ' (DSH proxy policy: web_fetch and child processes included)' : ''}`)
       }
     })
     return chain
