@@ -53,5 +53,10 @@
     "plugin",
     "proxy",
     "socks5"
+  ],
+  "contributors": [
+    {
+      "name": "大肥鱼"
+    }
   ]
 }

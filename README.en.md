@@ -53,3 +53,7 @@ Example: DSH via local Clash `http://127.0.0.1:7897`, LLM via `socks5h://user:pa
 - **LAN addresses fail?** Turn off "Connect LAN addresses directly" in Advanced.
 - **Need a restart?** Saving applies immediately; only the **first install** needs one DSH restart.
 - **Wrong settings?** Click **Test connection** — it tells you which step failed (unreachable, bad login, wrong type, …).
+
+## Contributors
+
+- 大肥鱼
