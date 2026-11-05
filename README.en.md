@@ -56,4 +56,6 @@ Example: DSH via local Clash `http://127.0.0.1:7897`, LLM via `socks5h://user:pa
 
 ## Contributors
 
+- south
 - 大肥鱼
+- DeepSeek (AI assistance)
