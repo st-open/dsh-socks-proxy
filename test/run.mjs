@@ -441,6 +441,55 @@ await test('mode=all: everything through SOCKS5 except loopback/private; env + n
   assert.equal(https.globalAgent, httpsAgentBefore, 'node:https global agent not restored')
 })
 
+// ---- integration: second upstream ------------------------------------------------------------
+await test('mode=all + second upstream: secondHosts go through the second proxy, the rest through the primary', async () => {
+  const primary = await startSocks({ username: 'p', password: 'pp' })
+  const second = await startSocks({ username: 's', password: 'ss' })
+  const config = normalizeConfig({
+    mode: 'all',
+    proxy: `socks5h://p:pp@127.0.0.1:${primary.port}`,
+    secondEnabled: true,
+    secondProxy: `socks5h://s:ss@127.0.0.1:${second.port}`,
+    secondHosts: ['github.com', '*.githubusercontent.com'],
+    bypassPrivate: false,
+  })
+  assert.equal(config.secondEnabled, true)
+  assert.deepEqual(config.secondHosts, ['github.com', '*.githubusercontent.com'])
+  const handle = await installSocksRouting(config, { llmHosts: () => [], logger })
+  try {
+    assert.equal(handle.hasSecond, true)
+    // GitHub host -> second proxy
+    assert.equal(await (await fetch(`http://github.com:${targetPort}/gh`)).text(), `hello github.com:${targetPort} /gh`)
+    assert.ok(second.seen.includes(`github.com:${targetPort}`), 'github went through second')
+    assert.ok(!primary.seen.includes(`github.com:${targetPort}`), 'github NOT through primary')
+    // subdomain of a second host -> second proxy
+    await (await fetch(`http://raw.githubusercontent.com:${targetPort}/r`)).text()
+    assert.ok(second.seen.includes(`raw.githubusercontent.com:${targetPort}`))
+    // other host -> primary proxy
+    assert.equal(await (await fetch(`http://api.example.com:${targetPort}/e`)).text(), `hello api.example.com:${targetPort} /e`)
+    assert.ok(primary.seen.includes(`api.example.com:${targetPort}`), 'example went through primary')
+    assert.ok(!second.seen.includes(`api.example.com:${targetPort}`), 'example NOT through second')
+    // upstreamFor classifies a URL the same way
+    assert.equal(handle.upstreamFor(new URL('https://github.com/x')), 'second')
+    assert.equal(handle.upstreamFor(new URL('https://api.example.com/x')), 'primary')
+  } finally {
+    await handle.dispose()
+    primary.server.close()
+    second.server.close()
+  }
+})
+
+await test('second upstream disabled/absent does not affect routing', async () => {
+  const c1 = normalizeConfig({ mode: 'all', proxy: 'socks5h://127.0.0.1:7890', secondEnabled: false, secondProxy: 'socks5h://127.0.0.1:1', secondHosts: ['github.com'] })
+  assert.equal(c1.secondEnabled, false)
+  assert.equal(c1.secondSocks, undefined)
+  // enabled but empty proxy or empty hosts -> stays off (never breaks primary)
+  const c2 = normalizeConfig({ mode: 'all', proxy: 'socks5h://127.0.0.1:7890', secondEnabled: true, secondProxy: '', secondHosts: ['github.com'] })
+  assert.equal(c2.secondEnabled, false)
+  const c3 = normalizeConfig({ mode: 'all', proxy: 'socks5h://127.0.0.1:7890', secondEnabled: true, secondProxy: 'socks5h://127.0.0.1:1', secondHosts: [] })
+  assert.equal(c3.secondEnabled, false)
+})
+
 console.log(`\n${passed} passed${process.exitCode ? ', some FAILED' : ''}`)
 const warn = logs.filter(([l]) => l === 'warn').map(([, m]) => m)
 if (warn.length) console.log('warnings logged:\n  ' + warn.join('\n  '))

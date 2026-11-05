@@ -12,6 +12,24 @@
 
 始终直连：loopback（localhost / 127.x / ::1）、`bypass` 列表，以及 `bypassPrivate: true` 时的内网 IP 字面量（10.x / 172.16-31.x / 192.168.x / 169.254.x / fc00::/7 / fe80::/10）。
 
+## 第二条代理（按目标分流）
+
+典型场景：**大模型 API 走主代理，但 GitHub 等网站需要另一条线路**。启用后，`all` 模式下命中 `secondHosts` 的主机会走 `secondProxy`（不同的代理服务器），其余主机仍走主代理 `proxy`。本地 HTTP 桥按目标主机选择上游，所以一个桥同时服务两条代理，子进程 / web_fetch 也一样生效。
+
+- 仅 `all` 模式可用（`llm` 模式下非 LLM 主机本就保持直连）。
+- `secondHosts` 支持逗号分隔与子域匹配：`github.com` 同时匹配 `api.github.com`；`*.githubusercontent.com` 等同。
+- 关闭或留空 `secondProxy` / `secondHosts` 时完全不影响主代理。
+
+在插件页「高级设置 → 启用第二条代理」里填写；或写进 `cordis.patch.yml`：
+
+```yaml
+    secondEnabled: true
+    secondProxy: socks5h://127.0.0.1:7891     # GitHub 等走这条
+    secondHosts: [github.com, '*.githubusercontent.com']
+```
+
+> 子进程（git/curl 等）只通过 `HTTP(S)_PROXY` 指向本地桥，桥再按目标主机选上游，所以同一个 `HTTP_PROXY` 也能让 GitHub 与其它网站各走各的代理。
+
 ## 原理
 
 1. 插件在 `127.0.0.1:<随机端口>` 起一个本地 **HTTP 桥**，把请求转给上游代理（自写 SOCKS5 客户端和 HTTP CONNECT 客户端，支持用户名/密码认证，无第三方依赖）。上游是 HTTP(S) 代理时，`https://` 走 CONNECT 隧道，明文 `http://` 按绝对 URL 转发（很多代理只允许 CONNECT 到 443）。桥要求每次启动随机生成的 Basic 凭据，其他本机进程无法借用；上游代理的账号密码也不会出现在子进程环境变量里。

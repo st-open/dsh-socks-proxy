@@ -70,6 +70,24 @@ A structured form is also accepted:
 
 The plugin page's **Test connection** only probes the proxy server itself (and each model endpoint's reachability) without touching live routing. Results show latency, authentication, and per-endpoint status.
 
+## Second proxy (per-target routing)
+
+Common case: **the LLM API goes through the main proxy, but GitHub and other sites need a different route.** When enabled, in `all` mode hosts matching `secondHosts` use `secondProxy` (a different proxy server) while every other host keeps the primary `proxy`. The local bridge picks the upstream per destination, so one bridge serves both proxies — child processes and web_fetch included.
+
+- Only available in `all` mode (in `llm` mode non-LLM hosts stay direct by design).
+- `secondHosts` is comma separated and matches subdomains: `github.com` also matches `api.github.com`; `*.githubusercontent.com` is the same.
+- Disabled or with an empty `secondProxy` / `secondHosts`, the primary proxy is unaffected.
+
+Set it under **Advanced → Enable a second proxy** on the plugin page, or in `cordis.patch.yml`:
+
+```yaml
+    secondEnabled: true
+    secondProxy: socks5h://127.0.0.1:7891     # GitHub etc. use this
+    secondHosts: [github.com, '*.githubusercontent.com']
+```
+
+> Child processes (git/curl …) only get `HTTP(S)_PROXY` pointing at the local bridge; the bridge then picks the upstream per host, so one `HTTP_PROXY` still sends GitHub and other sites through their respective proxies.
+
 ## How it works
 
 1. Starts a local HTTP bridge on `127.0.0.1:<random port>` forwarding to the upstream proxy (built-in SOCKS5 and HTTP CONNECT clients, username/password auth, no third-party dependencies).
