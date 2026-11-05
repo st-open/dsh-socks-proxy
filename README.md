@@ -59,4 +59,3 @@ dsh plugin --profile desktop add github:st-open/dsh-socks-proxy
 
 - south
 - 大肥鱼
-- DeepSeek（AI 协作）
