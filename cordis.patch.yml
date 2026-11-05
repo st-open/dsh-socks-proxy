@@ -1,0 +1,11 @@
+# SOCKS5 outbound proxy for DSH. Override `config` from your profile's
+# cordis.patch.yml with an entry `- id: socks-proxy` (see README.zh.md).
+- insert:
+    - id: socks-proxy
+      name: '@st-open/dsh-socks-proxy'
+      config:
+        # llm = only LLM API requests; all = every DSH outbound request; off = disabled
+        # Installed dormant; configure the real proxy on the Plugins page, then switch mode.
+        mode: 'off'
+        # socks5h:// lets the proxy resolve DNS; socks5:// resolves locally
+        proxy: socks5h://127.0.0.1:7890

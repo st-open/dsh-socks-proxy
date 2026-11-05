@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Proxy (SOCKS5 / HTTP)",
+    "description": "Route DSH outbound traffic through a SOCKS5, HTTP or HTTPS proxy in one of two modes: LLM API requests only (provider endpoints are detected from your model settings), or all DSH traffic (including web search, web fetch, MCP and terminal commands). Username/password authentication, paste-anything address recognition, and a one-click test of the proxy server and every model endpoint. Set it up on this page; saving applies immediately."
+  }
+}
