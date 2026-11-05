@@ -11,8 +11,11 @@ An outbound proxy plugin for **DeepSeek Harness (DSH)**: route DSH traffic throu
 | mode | Traffic through the proxy | Other traffic |
 |---|---|---|
 | `llm` | LLM API requests only (provider `baseURL` hosts from your model settings + common official endpoints + `llmHosts`) | Keeps its original route (direct, or an HTTP proxy from the environment) |
-| `all` | Every outbound request of DSH: LLM, MCP HTTP, web_search, **web_fetch**, `node:http` clients, and child processes started afterwards | — |
+| `dsh` | DSH's own outbound only: MCP HTTP, web_search, **web_fetch**, `node:http` clients, and child processes started afterwards | LLM API stays direct |
+| `all` | Every outbound request of DSH: models plus DSH itself (`llm` + `dsh`) | — |
 | `off` | Nothing | — |
+
+> Relationship: `all = dsh + llm`.
 
 Loopback (localhost / 127.x / ::1), the `bypass` list, and — with `bypassPrivate: true` — private LAN IP literals always stay direct.
 
@@ -69,24 +72,6 @@ A structured form is also accepted:
 ## Test the connection
 
 The plugin page's **Test connection** only probes the proxy server itself (and each model endpoint's reachability) without touching live routing. Results show latency, authentication, and per-endpoint status.
-
-## Second proxy (per-target routing)
-
-Common case: **the LLM API goes through the main proxy, but GitHub and other sites need a different route.** When enabled, in `all` mode hosts matching `secondHosts` use `secondProxy` (a different proxy server) while every other host keeps the primary `proxy`. The local bridge picks the upstream per destination, so one bridge serves both proxies — child processes and web_fetch included.
-
-- Only available in `all` mode (in `llm` mode non-LLM hosts stay direct by design).
-- `secondHosts` is comma separated and matches subdomains: `github.com` also matches `api.github.com`; `*.githubusercontent.com` is the same.
-- Disabled or with an empty `secondProxy` / `secondHosts`, the primary proxy is unaffected.
-
-Set it under **Advanced → Enable a second proxy** on the plugin page, or in `cordis.patch.yml`:
-
-```yaml
-    secondEnabled: true
-    secondProxy: socks5h://127.0.0.1:7891     # GitHub etc. use this
-    secondHosts: [github.com, '*.githubusercontent.com']
-```
-
-> Child processes (git/curl …) only get `HTTP(S)_PROXY` pointing at the local bridge; the bridge then picks the upstream per host, so one `HTTP_PROXY` still sends GitHub and other sites through their respective proxies.
 
 ## How it works
 

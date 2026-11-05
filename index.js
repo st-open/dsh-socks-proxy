@@ -32,7 +32,7 @@ const hostList = () => (Schema ? Schema.union([Schema.array(Schema.string()), Sc
 /** Plugin config schema; volatile fields are editable from the Plugins page without a remount. */
 export const Config = Schema
   ? Schema.object({
-      mode: Schema.union(['off', 'llm', 'all']).default('llm').volatile(),
+      mode: Schema.union(['off', 'llm', 'dsh', 'all']).default('llm').volatile(),
       // url = paste an address / command into `proxy`; fields = type/host/port/username/password boxes
       inputMode: Schema.union(['url', 'fields']).default('url').volatile(),
       proxy: Schema.string().default('').volatile(),
@@ -50,10 +50,6 @@ export const Config = Schema
       exportToChildren: Schema.boolean().default(true),
       patchNodeHttp: Schema.boolean().default(true),
       logTunnels: Schema.boolean().default(false),
-      // Second upstream: hosts matching secondHosts use secondProxy instead of the primary proxy.
-      secondEnabled: Schema.boolean().default(false).volatile(),
-      secondProxy: Schema.string().default('').volatile(),
-      secondHosts: hostList().volatile(),
       socks: Schema.object({
         type: Schema.union(['socks5', 'http', 'https']),
         host: Schema.string(),
@@ -113,16 +109,6 @@ export function apply(ctx, rawConfig) {
       const socks = await probeSocks(config.socks)
       logger.info(`socks-proxy: test ${describeUpstream(config.socks)} -> ${socks.ok ? `ok (auth ${socks.auth}, ${socks.totalMs} ms)` : `${socks.code}: ${socks.message}`}`)
       const result = { ...socks }
-      // Probe the second upstream as well, so the page can show whether the GitHub/other proxy works.
-      if (config.secondEnabled && config.secondSocks) {
-        try {
-          const second = await probeSocks(config.secondSocks)
-          result.second = { ...second, hosts: config.secondHosts }
-          logger.info(`socks-proxy: test second ${describeUpstream(config.secondSocks)} -> ${second.ok ? `ok (${second.totalMs} ms)` : `${second.code}: ${second.message}`}`)
-        } catch (error) {
-          result.second = { ok: false, code: 'internal', message: String(error?.message ?? error) }
-        }
-      }
       // Also check every configured model endpoint the way these settings would reach it.
       if (body?.checkEndpoints !== false) {
         try {
@@ -191,12 +177,13 @@ export function apply(ctx, rawConfig) {
         return
       }
       const where = describeUpstream(config.socks)
-      const secondNote = handle.hasSecond ? `; second upstream ${describeUpstream(config.secondSocks)} for: ${config.secondHosts.join(', ')}` : ''
       if (config.mode === 'llm') {
         const hosts = llmHosts().filter((h) => handle.shouldProxy(new URL(`https://${h.includes(':') && !h.startsWith('[') ? `[${h}]` : h}`)))
         logger.info(`socks-proxy: mode=llm via ${where}; LLM hosts now: ${hosts.join(', ') || '(none)'}`)
+      } else if (config.mode === 'dsh') {
+        logger.info(`socks-proxy: mode=dsh via ${where} (DSH's own traffic proxied; LLM hosts stay direct)${handle.viaDshPolicy ? ' (DSH proxy policy: web_fetch and child processes included)' : ''}`)
       } else {
-        logger.info(`socks-proxy: mode=all via ${where}${secondNote}${handle.viaDshPolicy ? ' (DSH proxy policy: web_fetch and child processes included)' : ''}`)
+        logger.info(`socks-proxy: mode=all via ${where}${handle.viaDshPolicy ? ' (DSH proxy policy: web_fetch and child processes included)' : ''}`)
       }
     })
     return chain

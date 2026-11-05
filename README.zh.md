@@ -2,33 +2,18 @@
 
 ![界面示意（非真实截图）](docs/preview.svg)
 
-让 DeepSeek Harness 的出站流量走 **SOCKS5**、**HTTP** 或 **HTTPS**（与代理之间走 TLS）代理。两种模式：
+让 DeepSeek Harness 的出站流量走 **SOCKS5**、**HTTP** 或 **HTTPS**（与代理之间走 TLS）代理。三种模式：
 
 | mode | 走代理的流量 | 其他流量 |
 |---|---|---|
 | `llm` | 仅 LLM API 请求（自动识别 `dsh-llm-pi-ai` 中各 provider 的 `baseURL` 主机 + 常见官方端点 + `llmHosts`） | 保持原路由（直连，或环境变量里的 HTTP 代理） |
-| `all` | DSH 进程内全部出站：LLM、MCP HTTP、web_search、**web_fetch**、`node:http` 客户端（遥测），以及之后启动的子进程（bash/git/curl/pnpm 通过 `HTTP(S)_PROXY`） | — |
+| `dsh` | 仅 DSH 自身的出站：MCP HTTP、web_search、**web_fetch**、`node:http` 客户端（遥测），以及之后启动的子进程（bash/git/curl/pnpm 通过 `HTTP(S)_PROXY`） | LLM API 保持直连 |
+| `all` | DSH 进程内全部出站：大模型 + DSH 本身（= `llm` + `dsh`） | — |
 | `off` | 不做任何事 | — |
 
+> 关系：`all = dsh + llm`。
+
 始终直连：loopback（localhost / 127.x / ::1）、`bypass` 列表，以及 `bypassPrivate: true` 时的内网 IP 字面量（10.x / 172.16-31.x / 192.168.x / 169.254.x / fc00::/7 / fe80::/10）。
-
-## 第二条代理（按目标分流）
-
-典型场景：**大模型 API 走主代理，但 GitHub 等网站需要另一条线路**。启用后，`all` 模式下命中 `secondHosts` 的主机会走 `secondProxy`（不同的代理服务器），其余主机仍走主代理 `proxy`。本地 HTTP 桥按目标主机选择上游，所以一个桥同时服务两条代理，子进程 / web_fetch 也一样生效。
-
-- 仅 `all` 模式可用（`llm` 模式下非 LLM 主机本就保持直连）。
-- `secondHosts` 支持逗号分隔与子域匹配：`github.com` 同时匹配 `api.github.com`；`*.githubusercontent.com` 等同。
-- 关闭或留空 `secondProxy` / `secondHosts` 时完全不影响主代理。
-
-在插件页「高级设置 → 启用第二条代理」里填写；或写进 `cordis.patch.yml`：
-
-```yaml
-    secondEnabled: true
-    secondProxy: socks5h://127.0.0.1:7891     # GitHub 等走这条
-    secondHosts: [github.com, '*.githubusercontent.com']
-```
-
-> 子进程（git/curl 等）只通过 `HTTP(S)_PROXY` 指向本地桥，桥再按目标主机选上游，所以同一个 `HTTP_PROXY` 也能让 GitHub 与其它网站各走各的代理。
 
 ## 原理
 

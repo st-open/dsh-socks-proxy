@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     /** Shown in the panel so a stale (cached) page is obvious. Keep in sync with package.json. */
     const PANEL_VERSION = '0.8.0';
     const NS = 'socksProxy';
-    const MODES = ['off', 'llm', 'all'];
+    const MODES = ['off', 'llm', 'dsh', 'all'];
     const INPUT_MODES = ['url', 'fields'];
     const PROXY_TYPES = ['socks5', 'http', 'https'];
     const TYPE_LABELS = { socks5: 'SOCKS5', http: 'HTTP', https: 'HTTPS' };
@@ -25,10 +25,12 @@ window.__ModuleLoader__.load({
       mode: '代理模式',
       'mode.off': '关闭',
       'mode.llm': '仅大模型',
+      'mode.dsh': '仅 DSH 本身',
       'mode.all': '全部流量',
       'modeDesc.off': '不改变任何流量的路由。',
       'modeDesc.llm': '只有发往大模型接口的请求走代理（自动包含模型设置里各 provider 的地址），其余保持原样。',
-      'modeDesc.all': 'DSH 的全部出站请求走代理：大模型、联网搜索、网页抓取、MCP，以及之后启动的终端命令。',
+      'modeDesc.dsh': 'DSH 自身的出站请求走代理（联网搜索、网页抓取、MCP，以及之后启动的终端命令），但大模型接口保持直连。',
+      'modeDesc.all': 'DSH 的全部出站请求走代理：大模型 + DSH 本身（搜索、抓取、MCP、终端命令）。等于「DSH 本身 + 大模型」。',
       modeHint: '保存后立即生效。',
       server: '代理服务器',
       proxyType: '代理类型',
@@ -73,13 +75,6 @@ window.__ModuleLoader__.load({
       bypassHint: '逗号分隔；example.com 同时匹配子域名，“10.1.” 按 IP 前缀匹配。',
       llmHosts: '额外的大模型主机',
       llmHostsHint: '仅「仅大模型」模式使用，逗号分隔。模型设置里的接口地址已自动包含。',
-      secondEnabled: '启用第二条代理（按目标分流）',
-      secondEnabledHint: '「全部流量」模式下，指定主机走另一条代理（例如大模型走主代理、GitHub 等走这条），其余仍走主代理。',
-      secondProxy: '第二条代理地址',
-      secondProxyHint: '与主代理同格式：socks5://、http(s):// 地址或 curl / export 命令。留空则不启用。',
-      secondHosts: '走第二条代理的主机',
-      secondHostsHint: '逗号分隔；github.com 同时匹配子域名，*.githubusercontent.com 等同。常用于需额外线路访问的网站。',
-      'test.second': '第二条代理',
       overridden: '已修改',
       reset: '恢复默认',
       readOnly: '本部署的设置为只读。',
@@ -123,10 +118,12 @@ window.__ModuleLoader__.load({
       mode: 'Proxy mode',
       'mode.off': 'Off',
       'mode.llm': 'LLM only',
+      'mode.dsh': 'DSH only',
       'mode.all': 'All traffic',
       'modeDesc.off': 'Routing is left unchanged.',
       'modeDesc.llm': "Only requests to LLM endpoints use SOCKS5 (every provider endpoint from your model settings is included).",
-      'modeDesc.all': 'Every outbound DSH request uses SOCKS5: models, web search, web fetch, MCP and terminal commands started afterwards.',
+      'modeDesc.dsh': "DSH's own outbound requests use SOCKS5 (web search, web fetch, MCP and terminal commands started afterwards), while LLM endpoints stay direct.",
+      'modeDesc.all': 'Every outbound DSH request uses SOCKS5: models plus DSH itself (search, fetch, MCP, terminal commands). This equals "DSH only" + "LLM only".',
       modeHint: 'Applies as soon as you save.',
       server: 'Proxy server',
       proxyType: 'Proxy type',
@@ -171,13 +168,6 @@ window.__ModuleLoader__.load({
       bypassHint: 'Comma separated; example.com also matches subdomains, "10.1." matches an IPv4 prefix.',
       llmHosts: 'Extra LLM hosts',
       llmHostsHint: 'LLM-only mode, comma separated. Endpoints from your model settings are already included.',
-      secondEnabled: 'Enable a second proxy (per-target routing)',
-      secondEnabledHint: 'In "All traffic" mode, listed hosts use this other proxy (e.g. LLM via the primary, GitHub via this one); every other host keeps the primary.',
-      secondProxy: 'Second proxy address',
-      secondProxyHint: 'Same formats as the primary: socks5://, http(s)://, or a curl / export command. Empty disables it.',
-      secondHosts: 'Hosts that use the second proxy',
-      secondHostsHint: 'Comma separated; github.com also matches subdomains, *.githubusercontent.com is the same. Use for sites that need a different route.',
-      'test.second': 'Second proxy',
       overridden: 'Changed',
       reset: 'Reset',
       readOnly: 'This deployment stores settings read-only.',
@@ -349,17 +339,6 @@ window.__ModuleLoader__.load({
       boolField('bypassPrivate'),
       { field: 'bypass', format: listFormat, parse: listParse },
       { field: 'llmHosts', format: listFormat, parse: listParse },
-      { field: 'secondEnabled', format: (v) => (v === 'true' || v === true ? 'true' : 'false'), parse: (text) => ({ kind: 'set', value: text === 'true' ? 'true' : 'false' }) },
-      {
-        field: 'secondProxy',
-        format: str,
-        parse: (text) => {
-          if (text.trim() === '') return { kind: 'clear' };
-          const parsed = parseProxyInput(text);
-          return parsed ? { kind: 'set', value: parsed.url } : undefined;
-        },
-      },
-      { field: 'secondHosts', format: listFormat, parse: listParse },
     ];
     const FIELD_NAMES = FIELDS.map((f) => f.field);
 
@@ -599,13 +578,7 @@ window.__ModuleLoader__.load({
           bypassPrivate: state.bypassPrivate.text !== 'false',
           bypass: state.bypass.text,
           llmHosts: state.llmHosts.text,
-          secondEnabled: state.secondEnabled.text === 'true',
-          secondHosts: state.secondHosts.text,
         };
-        if (draft.secondEnabled && state.secondProxy.text.trim()) {
-          const parsedSecond = parseProxyInput(state.secondProxy.text);
-          if (parsedSecond) draft.secondProxy = parsedSecond.url;
-        }
         if (inputMode === 'url') {
           const parsed = parseProxyInput(state.proxy.text);
           if (!parsed) {
@@ -667,7 +640,6 @@ window.__ModuleLoader__.load({
       }
 
       const endpoints = !busy && result && Array.isArray(result.endpoints) ? result.endpoints : undefined;
-      const second = !busy && result && result.second ? result.second : undefined;
       const list = endpoints
         ? endpoints.length
           ? h('div', { className: 'dsp-list' }, [
@@ -677,31 +649,12 @@ window.__ModuleLoader__.load({
                   h(P.StateDot, { key: 'dot', state: e.ok ? 'done' : 'error', size: 8 }),
                   h('span', { key: 'route', className: 'dsp-route' }, e.route),
                   h('span', { key: 'host', className: 'dsp-host' }, `${e.host}:${e.port}`),
-                  h(P.Tag, { key: 'via', tone: e.via === 'proxy' ? 'info' : 'outline' }, e.via === 'proxy' ? (e.upstream === 'second' ? `${t('test.via.proxy')} · ${t('test.second')}` : t('test.via.proxy')) : t('test.via.direct')),
+                  h(P.Tag, { key: 'via', tone: e.via === 'proxy' ? 'info' : 'outline' }, e.via === 'proxy' ? t('test.via.proxy') : t('test.via.direct')),
                   h('span', { key: 'ms', className: 'dsp-ms', 'data-error': e.ok ? undefined : '' }, e.ok ? `${e.ms} ms` : shortError(t, e.code)),
                 ]),
               ),
             ])
           : h('p', { className: 'dsp-hint' }, t('test.noEndpoints'))
-        : null;
-      const secondStatus = second
-        ? h('div', { className: 'dsp-status', 'data-state': second.ok ? 'done' : 'error' }, [
-            h('span', { key: 'd', className: 'dsp-status-dot' }, h(P.StateDot, { state: second.ok ? 'done' : 'error' })),
-            h('div', { key: 'm', className: 'dsp-status-main' }, [
-              h('span', { key: 't', className: 'dsp-status-title' }, [
-                t('test.second'),
-                h(React.Fragment, { key: 'sp1' }, ' '),
-                h(P.Tag, { key: 'type', tone: 'neutral' }, TYPE_LABELS[second.type] || 'SOCKS5'),
-                h(React.Fragment, { key: 'sp2' }, ' '),
-                second.ok
-                  ? h(P.Tag, { key: 'auth', tone: 'success' }, t(second.auth === 'password' ? 'test.auth.password' : 'test.auth.none'))
-                  : h(P.Tag, { key: 'fail', tone: 'neutral' }, shortError(t, second.code)),
-              ]),
-              second.ok
-                ? h('span', { key: 'meta', className: 'dsp-status-meta dsp-mono' }, `${second.via}${second.hosts && second.hosts.length ? ' · ' + second.hosts.join(', ') : ''} · ${second.totalMs} ms`)
-                : h('span', { key: 'meta', className: 'dsp-status-meta' }, translated(t, `err.${second.code}`, { message: second.message }) || second.message),
-            ]),
-          ])
         : null;
 
       return h('div', { className: 'dsp-field' }, [
@@ -711,7 +664,6 @@ window.__ModuleLoader__.load({
         ]),
         h('p', { key: 'hint', className: 'dsp-hint' }, t('testHint')),
         status ? h(React.Fragment, { key: 'status' }, status) : null,
-        secondStatus ? h(React.Fragment, { key: 'second' }, secondStatus) : null,
         list ? h(React.Fragment, { key: 'list' }, list) : null,
       ]);
     }
@@ -826,19 +778,6 @@ window.__ModuleLoader__.load({
               h(ToggleRow, { key: 'bp', label: t('bypassPrivate'), hint: t('bypassPrivateHint'), field: state.bypassPrivate, disabled, onChange: (checked) => edit('bypassPrivate', checked ? 'true' : 'false') }),
               h(TextRow, { key: 'bypass', ...common, name: 'bypass', field: state.bypass, placeholder: 'corp.example.com, 192.168.1.50' }),
               mode === 'llm' ? h(TextRow, { key: 'llm', ...common, name: 'llmHosts', field: state.llmHosts, placeholder: 'api.example.com' }) : null,
-              mode === 'all'
-                ? h(React.Fragment, { key: 'second' }, [
-                    h('div', { key: 'div', className: 'dsp-nested' }, [
-                      h(ToggleRow, { key: 'en', label: t('secondEnabled'), hint: t('secondEnabledHint'), field: state.secondEnabled, disabled, onChange: (checked) => edit('secondEnabled', checked ? 'true' : 'false') }),
-                      state.secondEnabled.text === 'true'
-                        ? h(TextRow, { key: 'sp', ...common, name: 'secondProxy', field: state.secondProxy, placeholder: t('proxyPlaceholder') })
-                        : null,
-                      state.secondEnabled.text === 'true'
-                        ? h(TextRow, { key: 'sh', ...common, name: 'secondHosts', field: state.secondHosts, placeholder: 'github.com, *.githubusercontent.com' })
-                        : null,
-                    ]),
-                  ])
-                : null,
             ])
           : null,
       ]);
