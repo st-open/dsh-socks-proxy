@@ -1,41 +1,22 @@
-# dsh-socks-proxy
+# Proxy (SOCKS5 / HTTP)
 
-[简体中文](README.zh.md) | English
+![Preview (illustration, not a screenshot)](docs/preview.svg)
 
-An outbound proxy plugin for **DeepSeek Harness (DSH)**: route DSH traffic through **SOCKS5**, **HTTP**, or **HTTPS** proxies. Two modes — proxy only LLM API requests, or all DSH traffic.
+Route DeepSeek Harness (DSH) internet traffic through a proxy. Supports **SOCKS5, HTTP, HTTPS**.
 
-![界面示意（非真实截图）](docs/preview.svg)
+## What it does
 
-## Modes
+Maybe your computer can reach the LLM but not GitHub/Google — or the other way round. This plugin decides **which requests use a proxy and which stay direct**.
 
-| mode | Traffic through the proxy | Other traffic |
+## Three modes (pick one)
+
+| Mode | Through the proxy | Direct |
 |---|---|---|
-| `llm` | LLM API requests only (provider `baseURL` hosts from your model settings + common official endpoints + `llmHosts`) | Keeps its original route (direct, or an HTTP proxy from the environment) |
-| `dsh` | DSH's own outbound only: MCP HTTP, web_search, **web_fetch**, `node:http` clients, and child processes started afterwards | LLM API stays direct |
-| `all` | Every outbound request of DSH: models plus DSH itself (`llm` + `dsh`) | — |
-| `off` | Nothing | — |
+| **LLM only** | LLM API requests | everything else |
+| **DSH only** | DSH's own traffic: web pages, search, terminal commands | LLM |
+| **All traffic** | everything (LLM + DSH) | nothing |
 
-> Relationship: `all = dsh + llm`.
-
-## Dedicated LLM proxy (two upstreams)
-
-Want **DSH through one proxy and the LLM through another** (e.g. DSH via local Clash, LLM via a SOCKS)? 
-
-- Set the primary **Proxy** to the one DSH uses (e.g. `http://127.0.0.1:7897`);
-- Advanced → enable **Separate proxy for LLM** and fill the LLM-only address (e.g. `socks5h://user:pass@10.0.0.1:1080`);
-- Choose the **All traffic** mode.
-
-Result: LLM hosts (provider endpoints from your model settings + `llmHosts`) use the LLM proxy; every other proxied host keeps the primary. The two are independent.
-
-```yaml
-    mode: all
-    proxy: http://127.0.0.1:7897
-    llmProxyEnabled: true
-    llmProxy: socks5h://user:pass@10.0.0.1:1080
-```
-
-
-Loopback (localhost / 127.x / ::1), the `bypass` list, and — with `bypassPrivate: true` — private LAN IP literals always stay direct.
+> In short: **All traffic = LLM only + DSH only**.
 
 ## Install
 
@@ -43,69 +24,30 @@ Loopback (localhost / 127.x / ::1), the `bypass` list, and — with `bypassPriva
 dsh plugin --profile desktop add github:st-open/dsh-socks-proxy
 ```
 
-Or install from a local checkout:
+Restart DSH once after the first install.
 
-```bash
-dsh plugin --profile desktop add link:/absolute/path/to/dsh-socks-proxy
-```
+## Use (3 steps)
 
-Restart DSH once after the first install so the Host part and the settings page load.
+1. Open **Plugins → Proxy (SOCKS5 / HTTP)**.
+2. Paste your proxy address into **Proxy server**, e.g.:
+   - `socks5h://127.0.0.1:7890`
+   - `http://127.0.0.1:7897`
+   - (you can also paste `export HTTPS_PROXY=…` or `curl -x …` — it is detected automatically)
+3. Choose a mode → **Save**. It applies immediately.
 
-## Configure
+Not sure it works? Click **Test connection** first.
 
-Recommended: **Plugins → Installed plugins → Proxy (SOCKS5 / HTTP)**. Choose the mode, fill in the proxy, then **Save** — it takes effect immediately (all fields are hot-updatable, no restart needed).
+## Want "DSH via A, LLM via B"?
 
-Or configure `~/.dsh/profiles/<profile>/cordis.patch.yml`:
+1. Mode: **All traffic**.
+2. **Proxy server**: A.
+3. Open **Advanced → Separate proxy for LLM**, fill in B.
 
-```yaml
-- id: socks-proxy
-  name: "@st-open/dsh-socks-proxy"
-  config:
-    mode: llm                     # "off" | llm | all
-    proxy: socks5h://127.0.0.1:7890   # socks5h:// resolves DNS at the proxy
-    bypassPrivate: true
-    bypass: []                    # hosts that always stay direct
-    llmHosts: []                  # extra hosts treated as LLM in llm mode
-    providers: []                 # restrict llm mode to these provider routes
-    builtinHosts: true
-    exportToChildren: true
-    patchNodeHttp: true
-    logTunnels: false
-```
+Example: DSH via local Clash `http://127.0.0.1:7897`, LLM via `socks5h://user:pass@10.0.0.1:1080`.
 
-A structured form is also accepted:
+## FAQ
 
-```yaml
-    socks:
-      host: 127.0.0.1
-      port: 1080
-      username: me
-      passwordEnv: SOCKS_PASSWORD   # read the password from an env var, avoid plaintext YAML
-      remoteDns: true
-      timeoutMs: 15000
-```
-
-`SOCKS5h` resolves DNS at the proxy (recommended against DNS pollution); `socks5://` resolves locally.
-
-## Test the connection
-
-The plugin page's **Test connection** only probes the proxy server itself (and each model endpoint's reachability) without touching live routing. Results show latency, authentication, and per-endpoint status.
-
-## How it works
-
-1. Starts a local HTTP bridge on `127.0.0.1:<random port>` forwarding to the upstream proxy (built-in SOCKS5 and HTTP CONNECT clients, username/password auth, no third-party dependencies).
-2. Replaces undici's global dispatcher with a routing dispatcher: matching requests go through the bridge, others keep the original dispatcher.
-3. In `all` mode, registers the bridge with `@deepseek-ai/dsh-http-proxy` so web_fetch, child processes, and `proxyRouteFor()` agree.
-4. Restores the original dispatcher, environment, and agents on disable/uninstall.
-
-## Known limitations
-
-- SOCKS5 only (no SOCKS4 / PAC / system-proxy auto-detection).
-- `llm` mode matches by hostname; a host shared with other services gets all its traffic proxied.
-- Worker threads (workflow / PTC runtime) have their own global dispatcher and are not affected.
-- Child processes are proxied only in `all` mode with `exportToChildren: true`, and only those started after the plugin loads.
-- Keep-alive connections established before the plugin loads keep their old route until closed.
-
-## License
-
-MIT
+- **`socks5h://` vs `socks5://`?** `h` lets the proxy resolve DNS — usually more reliable, **recommended**.
+- **LAN addresses fail?** Turn off "Connect LAN addresses directly" in Advanced.
+- **Need a restart?** Saving applies immediately; only the **first install** needs one DSH restart.
+- **Wrong settings?** Click **Test connection** — it tells you which step failed (unreachable, bad login, wrong type, …).
