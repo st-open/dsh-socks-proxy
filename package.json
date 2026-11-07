@@ -1,6 +1,6 @@
 {
   "name": "@st-open/dsh-socks-proxy",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "private": true,
   "type": "module",
   "description": "Route DeepSeek Harness outbound traffic through a SOCKS5 or HTTP(S) proxy: LLM API only, or all DSH traffic.",

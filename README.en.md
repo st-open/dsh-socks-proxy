@@ -15,7 +15,7 @@ Maybe your computer can reach the LLM but not GitHub/Google — or the other way
 | Switch | When on |
 |---|---|
 | **DSH's own traffic uses a proxy** | DSH itself (web search, web fetch, MCP, terminal commands) goes through the primary proxy |
-| **LLM traffic uses a proxy** | LLM API goes through a proxy; if a **LLM proxy address** is set it uses that, otherwise the primary proxy |
+| **LLM traffic uses a proxy** | LLM API goes through a proxy; if an **LLM proxy server** is set under it, it uses that, otherwise the primary proxy |
 
 Both off = no proxy; one on = only that kind is proxied; both on = each uses its own (possibly different) proxy.
 
@@ -44,7 +44,7 @@ Not sure it works? Click **Test connection** first.
 
 1. Turn on **both** switches (DSH's own traffic, and LLM traffic).
 2. **Proxy server**: A (for DSH).
-3. Advanced → **LLM proxy address**: B.
+3. Fill B in **LLM proxy server (optional)** that appears under the LLM switch.
 
 Example: DSH via local Clash `http://127.0.0.1:7897`, LLM via `socks5h://user:pass@10.0.0.1:1080`.
 

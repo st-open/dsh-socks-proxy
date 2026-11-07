@@ -12,7 +12,7 @@ window.__ModuleLoader__.load({
     const TEST_ROUTE = 'api/socks-proxy/test';
     const STATE_ROUTE = 'api/socks-proxy/state';
     /** Shown in the panel so a stale (cached) page is obvious. Keep in sync with package.json. */
-    const PANEL_VERSION = '0.11.1';
+    const PANEL_VERSION = '0.11.2';
     const NS = 'socksProxy';
     const MODES = ['off', 'llm', 'dsh', 'all'];
     const INPUT_MODES = ['url', 'fields'];
@@ -78,8 +78,8 @@ window.__ModuleLoader__.load({
       llmHostsHint: '仅「仅大模型」模式使用，逗号分隔。模型设置里的接口地址已自动包含。',
       llmProxyEnabled: '大模型走独立代理',
       llmProxyEnabledHint: '大模型单独走这条代理；留空则用上面的主代理。',
-      llmProxy: '大模型代理地址',
-      llmProxyHint: '可选。填了就大模型单独走这条，留空则大模型也用上面的主代理。格式同主代理。',
+      llmProxy: '大模型代理服务器（可选）',
+      llmProxyHint: '填了就大模型单独走这条；留空则大模型也用 DSH 同一条主代理。格式同主代理。',
       'test.llmUpstream': '大模型代理',
       proxyFor: '代理开关',
       'proxyFor.dsh': 'DSH 自己的流量走代理',
@@ -99,7 +99,9 @@ window.__ModuleLoader__.load({
       'short.llm': '大模型代理',
       'short.all': '全部代理',
       'short.split': 'DSH + 大模型',
-      bothOnHint: '两个都开时：填了「大模型代理地址」= 各自走各自代理；留空 = 都走同一条主代理。',
+      bothOnHint: '两个都开时：填了「大模型代理服务器」= 各自走各自代理；留空 = 都走同一条主代理。',
+      dshProxyTitle: 'DSH 代理服务器',
+      primaryForLlm: '主代理（大模型使用）',
       'indicator.on': '代理已开启：{mode}',
       'indicator.off': '代理已关闭',
       'indicator.error': '代理状态未知',
@@ -202,8 +204,8 @@ window.__ModuleLoader__.load({
       llmHostsHint: 'LLM-only mode, comma separated. Endpoints from your model settings are already included.',
       llmProxyEnabled: 'Separate proxy for LLM',
       llmProxyEnabledHint: 'Send the LLM through this proxy; empty reuses the primary proxy.',
-      llmProxy: 'LLM proxy address',
-      llmProxyHint: 'Optional. If set, the LLM uses this proxy; empty reuses the primary proxy above. Same formats as the primary.',
+      llmProxy: 'LLM proxy server (optional)',
+      llmProxyHint: 'If set, the LLM uses this proxy; empty reuses the same DSH primary proxy. Same formats as the primary.',
       'test.llmUpstream': 'LLM proxy',
       proxyFor: 'Proxy switches',
       'proxyFor.dsh': "DSH's own traffic uses a proxy",
@@ -223,7 +225,9 @@ window.__ModuleLoader__.load({
       'short.llm': 'LLM proxy',
       'short.all': 'All traffic',
       'short.split': 'DSH + LLM',
-      bothOnHint: 'Both on: a filled LLM proxy = each uses its own; empty = both use the same primary proxy.',
+      bothOnHint: 'Both on: a filled LLM proxy server = each uses its own; empty = both use the same primary proxy.',
+      dshProxyTitle: 'DSH proxy server',
+      primaryForLlm: 'Primary proxy (for the LLM)',
       'indicator.on': 'Proxy on: {mode}',
       'indicator.off': 'Proxy off',
       'indicator.error': 'Proxy state unknown',
@@ -838,15 +842,6 @@ window.__ModuleLoader__.load({
       const masked = parsed ? parsed.url.replace(/:([^:@/]+)@/, ':••••••@') : '';
       const showParsed = parsed && parsed.url !== state.proxy.text.trim();
 
-      const modeSection = h('div', { key: 'mode', className: 'dsp-field' }, [
-        h('div', { key: 'head', className: 'dsp-head' }, h('label', { className: 'dsp-label' }, t('proxyFor'))),
-        h('div', { key: 'sw', className: 'dsp-nested' }, [
-          h(ToggleRow, { key: 'dsh', label: t('proxyFor.dsh'), hint: t('proxyFor.dshHint'), field: { text: dshOn ? 'true' : 'false' }, disabled, onChange: (checked) => setRouting(checked, llmOn) }),
-          h(ToggleRow, { key: 'llm', label: t('proxyFor.llm'), hint: t('proxyFor.llmHint'), field: { text: llmOn ? 'true' : 'false' }, disabled, onChange: (checked) => setRouting(dshOn, checked) }),
-        ]),
-        h('p', { key: 'desc', className: 'dsp-hint' }, `${t('modeHint')} ${t('bothOnHint')}`),
-      ]);
-
       const serverBody =
         inputMode === 'url'
           ? [
@@ -902,8 +897,10 @@ window.__ModuleLoader__.load({
                 : null,
             ];
 
-      const serverSection = h('div', { key: 'server', className: 'dsp-field' }, [
-        h(FieldHead, { key: 'head', t, label: t('server'), htmlFor: inputMode === 'url' ? 'plugin-config-socks-proxy-proxy' : undefined }, [
+      const llmProxyFilled = state.llmProxy.text.trim() !== '';
+      const primaryLabel = dshOn ? t('dshProxyTitle') : t('primaryForLlm');
+      const primaryBlock = h('div', { key: 'primary', className: 'dsp-nested' }, [
+        h(FieldHead, { key: 'head', t, label: primaryLabel, htmlFor: inputMode === 'url' ? 'plugin-config-socks-proxy-proxy' : undefined }, [
           h(P.SegmentedControl, {
             key: 'seg',
             id: 'plugin-config-socks-proxy-input',
@@ -917,6 +914,22 @@ window.__ModuleLoader__.load({
         ...serverBody,
         h('p', { key: 'note', className: 'dsp-note' }, [h(LockIcon, { key: 'i' }), h('span', { key: 't' }, t('passwordNote'))]),
       ]);
+      const llmBlock = h('div', { key: 'llmproxy', className: 'dsp-nested' }, [
+        h(TextRow, { key: 'lp', ...common, name: 'llmProxy', field: state.llmProxy, placeholder: t('proxyPlaceholder') }),
+      ]);
+      const modeSection = h('div', { key: 'mode', className: 'dsp-field' }, [
+        h('div', { key: 'head', className: 'dsp-head' }, h('label', { className: 'dsp-label' }, t('proxyFor'))),
+        h('div', { key: 'dshwrap', className: 'dsp-nested' }, [
+          h(ToggleRow, { key: 'dsh', label: t('proxyFor.dsh'), hint: t('proxyFor.dshHint'), field: { text: dshOn ? 'true' : 'false' }, disabled, onChange: (checked) => setRouting(checked, llmOn) }),
+          dshOn ? primaryBlock : null,
+        ]),
+        h('div', { key: 'llmwrap', className: 'dsp-nested' }, [
+          h(ToggleRow, { key: 'llm', label: t('proxyFor.llm'), hint: t('proxyFor.llmHint'), field: { text: llmOn ? 'true' : 'false' }, disabled, onChange: (checked) => setRouting(dshOn, checked) }),
+          (!dshOn && llmOn && !llmProxyFilled) ? primaryBlock : null,
+          llmOn ? llmBlock : null,
+        ]),
+        h('p', { key: 'desc', className: 'dsp-hint' }, `${t('modeHint')} ${t('bothOnHint')}`),
+      ]);
 
       const advancedSection = h('div', { key: 'adv', className: 'dsp-field' }, [
         h('button', { key: 'toggle', type: 'button', className: 'dsp-advanced', 'aria-expanded': advanced, onClick: () => setAdvanced(!advanced) }, [h(ChevronIcon, { key: 'i' }), t('advanced')]),
@@ -925,15 +938,12 @@ window.__ModuleLoader__.load({
               h(ToggleRow, { key: 'bp', label: t('bypassPrivate'), hint: t('bypassPrivateHint'), field: state.bypassPrivate, disabled, onChange: (checked) => edit('bypassPrivate', checked ? 'true' : 'false') }),
               h(TextRow, { key: 'bypass', ...common, name: 'bypass', field: state.bypass, placeholder: 'corp.example.com, 192.168.1.50' }),
               llmOn ? h(TextRow, { key: 'llm', ...common, name: 'llmHosts', field: state.llmHosts, placeholder: 'api.example.com' }) : null,
-              // Optional dedicated LLM proxy: fill it to send the LLM elsewhere; empty uses the primary proxy.
-              llmOn ? h(TextRow, { key: 'lp', ...common, name: 'llmProxy', field: state.llmProxy, placeholder: t('proxyPlaceholder') }) : null,
             ])
           : null,
       ]);
 
       return h(P.SettingsForm, { labels: formLabels(t), state, onSave: props.save, onDiscard: props.discard }, [
         modeSection,
-        serverSection,
         h(TestSection, { key: 'test', t, state, testConnection: props.testConnection }),
         advancedSection,
       ]);
