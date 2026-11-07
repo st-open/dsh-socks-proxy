@@ -39,6 +39,8 @@ Restart DSH once after the first install.
 
 Not sure it works? Click **Test connection** first.
 
+> **Sidebar indicator**: a small dot at the sidebar foot (beside Settings) — **green = proxy on**, **grey = off**; hover shows the current mode, so you never forget whether the proxy is active.
+
 ## Want "DSH via A, LLM via B"?
 
 1. Mode: **All traffic**.

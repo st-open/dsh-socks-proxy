@@ -14,6 +14,8 @@ import { probeEndpoints, probeSocks } from './lib/probe.js'
 
 /** Exact Host route the Plugins page posts to for "测试连接" (browser auth required). */
 export const TEST_ROUTE = '/api/socks-proxy/test'
+/** Read-only state route for the sidebar indicator (browser auth required). */
+export const STATE_ROUTE = '/api/socks-proxy/state'
 /** Process-wide slot holding the live test handler, so a route registered by an earlier instance still works. */
 const TEST_HANDLER = Symbol.for('local.dsh-socks-proxy.test-handler')
 
@@ -154,6 +156,30 @@ export function apply(ctx, rawConfig) {
       } catch (error) {
         // A previous instance already owns the path; its handler reads the same process-wide slot.
         if (!/already registered/i.test(String(error?.message ?? error))) throw error
+      }
+      try {
+        child.connection.fetch.register({
+          path: STATE_ROUTE,
+          methods: ['POST'],
+          requestBody: 'buffered',
+          fetch: () => {
+            try {
+              const c = normalizeConfig(rawConfig)
+              return Response.json({
+                ok: true,
+                mode: c.mode,
+                enabled: c.mode !== 'off',
+                upstream: describeUpstream(c.socks),
+                secondEnabled: Boolean(c.secondEnabled),
+                llmProxyEnabled: Boolean(c.llmProxyEnabled),
+              })
+            } catch (error) {
+              return Response.json({ ok: false, error: String(error?.message ?? error) })
+            }
+          },
+        })
+      } catch (error) {
+        if (!/already registered/i.test(String(error?.message ?? error))) logger.warn(`socks-proxy: state route unavailable: ${error?.message ?? error}`)
       }
     })
   } catch (error) {

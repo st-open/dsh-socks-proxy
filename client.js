@@ -10,8 +10,9 @@ window.__ModuleLoader__.load({
     const ENTRY_ID = 'socks-proxy';
     const PACKAGE = '@st-open/dsh-socks-proxy';
     const TEST_ROUTE = 'api/socks-proxy/test';
+    const STATE_ROUTE = 'api/socks-proxy/state';
     /** Shown in the panel so a stale (cached) page is obvious. Keep in sync with package.json. */
-    const PANEL_VERSION = '0.9.0';
+    const PANEL_VERSION = '0.10.0';
     const NS = 'socksProxy';
     const MODES = ['off', 'llm', 'dsh', 'all'];
     const INPUT_MODES = ['url', 'fields'];
@@ -80,6 +81,14 @@ window.__ModuleLoader__.load({
       llmProxy: '大模型代理地址',
       llmProxyHint: '与主代理同格式：socks5://、http(s):// 地址或 curl / export 命令。留空则不启用。',
       'test.llmUpstream': '大模型代理',
+      'indicator.label': '代理',
+      'indicator.on': '代理已开启：{mode}',
+      'indicator.off': '代理已关闭',
+      'indicator.error': '代理状态未知',
+      'indicator.mode.off': '关闭',
+      'indicator.mode.llm': '仅大模型',
+      'indicator.mode.dsh': '仅 DSH 本身',
+      'indicator.mode.all': '全部流量',
       overridden: '已修改',
       reset: '恢复默认',
       readOnly: '本部署的设置为只读。',
@@ -178,6 +187,14 @@ window.__ModuleLoader__.load({
       llmProxy: 'LLM proxy address',
       llmProxyHint: 'Same formats as the primary: socks5://, http(s)://, or a curl / export command. Empty disables it.',
       'test.llmUpstream': 'LLM proxy',
+      'indicator.label': 'Proxy',
+      'indicator.on': 'Proxy on: {mode}',
+      'indicator.off': 'Proxy off',
+      'indicator.error': 'Proxy state unknown',
+      'indicator.mode.off': 'Off',
+      'indicator.mode.llm': 'LLM only',
+      'indicator.mode.dsh': 'DSH only',
+      'indicator.mode.all': 'All traffic',
       overridden: 'Changed',
       reset: 'Reset',
       readOnly: 'This deployment stores settings read-only.',
@@ -459,6 +476,11 @@ window.__ModuleLoader__.load({
       '.dsp-nested{display:flex;flex-direction:column;gap:16px;padding:4px 0 0}',
       '.dsp-nested .dsp-sub+.dsp-sub,.dsp-nested .dsp-toggle+.dsp-sub{padding-top:16px;border-top:.5px solid var(--dsw-alias-border-l2)}',
       '@media (max-width:520px){.dsp-grid,.dsp-grid2{grid-template-columns:minmax(0,1fr)}}',
+      '.dsp-ind{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:var(--dsw-radius-sm);color:var(--dsw-alias-label-secondary);cursor:default}',
+      '.dsp-ind-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--dsw-alias-state-idle-primary)}',
+      '.dsp-ind[data-on=true] .dsp-ind-dot{background:var(--dsw-alias-state-success-primary)}',
+      '.dsp-ind[data-err=true] .dsp-ind-dot{background:var(--dsw-alias-state-warn-primary)}',
+      '.dsp-ind-txt{font-size:12px;line-height:1.4;white-space:nowrap}',
     ].join('\n');
 
     function installStyles() {
@@ -714,6 +736,48 @@ window.__ModuleLoader__.load({
       ]);
     }
 
+    async function fetchProxyState() {
+      const transport = globalThis.__DSH_TRANSPORT__;
+      const send = transport && typeof transport.fetch === 'function' ? transport.fetch : (input, init) => globalThis.fetch(input, init);
+      try {
+        const response = await send(STATE_ROUTE, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(8000) });
+        if (!response.ok) return { ok: false };
+        return await response.json();
+      } catch (error) {
+        return { ok: false, error: String((error && error.message) || error) };
+      }
+    }
+
+    /** Sidebar-foot indicator light: green when a proxy mode is on, grey when off. */
+    function ProxyIndicator(props) {
+      const { t } = props;
+      const [state, setState] = useState(undefined);
+      useEffect(() => {
+        let alive = true;
+        const load = async () => { const s = await fetchProxyState(); if (alive) setState(s); };
+        load();
+        const id = setInterval(load, 8000);
+        const onVis = () => { if (typeof document !== 'undefined' && document.visibilityState === 'visible') load(); };
+        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVis);
+        if (typeof window !== 'undefined') window.addEventListener('focus', load);
+        return () => {
+          alive = false; clearInterval(id);
+          if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVis);
+          if (typeof window !== 'undefined') window.removeEventListener('focus', load);
+        };
+      }, []);
+      if (!state) return null;
+      const ok = state.ok !== false;
+      const on = ok && Boolean(state.enabled);
+      const mode = ok ? String(state.mode || 'off') : 'off';
+      const modeLabel = translated(t, `indicator.mode.${mode}`) || mode;
+      const title = !ok ? t('indicator.error') : on ? fill(t('indicator.on'), { mode: modeLabel }) : t('indicator.off');
+      return h('div', { className: 'dsp-ind', 'data-on': on ? 'true' : 'false', 'data-err': ok ? 'false' : 'true', title, role: 'status', 'aria-label': title }, [
+        h('span', { key: 'd', className: 'dsp-ind-dot' }),
+        props.wide ? h('span', { key: 't', className: 'dsp-ind-txt' }, t('indicator.label')) : null,
+      ]);
+    }
+
     // ---- the page ----------------------------------------------------------------------------
     function ProxySettings(props) {
       const { t } = props;
@@ -856,6 +920,9 @@ window.__ModuleLoader__.load({
         ctx.effect(() => () => form.dispose(), 'socks-proxy: form');
         ctx.slots.inject('plugins.bundle.config', () =>
           ctx.slots.register({ name: 'plugins.bundle.config', key: PACKAGE, locale: NS, inject: () => form.inject() }, ProxySettings),
+        );
+        ctx.slots.inject('sidebar.footer.action', () =>
+          ctx.slots.register({ name: 'sidebar.footer.action', id: 'socks-proxy-indicator', order: -10, locale: NS }, ProxyIndicator),
         );
       },
     };
