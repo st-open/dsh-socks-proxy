@@ -12,7 +12,7 @@ window.__ModuleLoader__.load({
     const TEST_ROUTE = 'api/socks-proxy/test';
     const STATE_ROUTE = 'api/socks-proxy/state';
     /** Shown in the panel so a stale (cached) page is obvious. Keep in sync with package.json. */
-    const PANEL_VERSION = '0.11.2';
+    const PANEL_VERSION = '0.12.0';
     const NS = 'socksProxy';
     const MODES = ['off', 'llm', 'dsh', 'all'];
     const INPUT_MODES = ['url', 'fields'];
@@ -78,7 +78,7 @@ window.__ModuleLoader__.load({
       llmHostsHint: '仅「仅大模型」模式使用，逗号分隔。模型设置里的接口地址已自动包含。',
       llmProxyEnabled: '大模型走独立代理',
       llmProxyEnabledHint: '大模型单独走这条代理；留空则用上面的主代理。',
-      llmProxy: '大模型代理服务器（可选）',
+      llmProxy: '代理地址',
       llmProxyHint: '填了就大模型单独走这条；留空则大模型也用 DSH 同一条主代理。格式同主代理。',
       'test.llmUpstream': '大模型代理',
       proxyFor: '代理开关',
@@ -102,6 +102,11 @@ window.__ModuleLoader__.load({
       bothOnHint: '两个都开时：填了「大模型代理服务器」= 各自走各自代理；留空 = 都走同一条主代理。',
       dshProxyTitle: 'DSH 代理服务器',
       primaryForLlm: '主代理（大模型使用）',
+      'tag.dsh': 'DSH',
+      'tag.llm': '大模型',
+      llmProxyTitle: '大模型代理服务器（可选）',
+      collapse: '收起',
+      expand: '展开',
       'indicator.on': '代理已开启：{mode}',
       'indicator.off': '代理已关闭',
       'indicator.error': '代理状态未知',
@@ -204,7 +209,7 @@ window.__ModuleLoader__.load({
       llmHostsHint: 'LLM-only mode, comma separated. Endpoints from your model settings are already included.',
       llmProxyEnabled: 'Separate proxy for LLM',
       llmProxyEnabledHint: 'Send the LLM through this proxy; empty reuses the primary proxy.',
-      llmProxy: 'LLM proxy server (optional)',
+      llmProxy: 'Proxy address',
       llmProxyHint: 'If set, the LLM uses this proxy; empty reuses the same DSH primary proxy. Same formats as the primary.',
       'test.llmUpstream': 'LLM proxy',
       proxyFor: 'Proxy switches',
@@ -228,6 +233,11 @@ window.__ModuleLoader__.load({
       bothOnHint: 'Both on: a filled LLM proxy server = each uses its own; empty = both use the same primary proxy.',
       dshProxyTitle: 'DSH proxy server',
       primaryForLlm: 'Primary proxy (for the LLM)',
+      'tag.dsh': 'DSH',
+      'tag.llm': 'LLM',
+      llmProxyTitle: 'LLM proxy server (optional)',
+      collapse: 'Collapse',
+      expand: 'Expand',
       'indicator.on': 'Proxy on: {mode}',
       'indicator.off': 'Proxy off',
       'indicator.error': 'Proxy state unknown',
@@ -514,6 +524,24 @@ window.__ModuleLoader__.load({
       '.dsp-advanced[aria-expanded=true] svg{transform:rotate(90deg)}',
       '.dsp-nested{display:flex;flex-direction:column;gap:16px;padding:4px 0 0}',
       '.dsp-nested .dsp-sub+.dsp-sub,.dsp-nested .dsp-toggle+.dsp-sub{padding-top:16px;border-top:.5px solid var(--dsw-alias-border-l2)}',
+      '.dsp-block{margin-top:12px;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);padding:12px 14px;background:var(--dsw-alias-bg-layer-3)}',
+      '.dsp-block[data-kind=dsh]{border-left:3px solid var(--dsw-alias-brand-primary)}',
+      '.dsp-block[data-kind=llm]{border-left:3px solid var(--dsw-alias-state-success-primary)}',
+      '.dsp-block[data-off=true]{opacity:.55}',
+      '.dsp-block-head{display:flex;align-items:center;gap:10px;min-height:28px;flex-wrap:wrap}',
+      '.dsp-block-kind{font-size:11px;line-height:18px;padding:0 8px;border-radius:999px;color:#fff;flex:none}',
+      '.dsp-block[data-kind=dsh] .dsp-block-kind{background:var(--dsw-alias-brand-primary)}',
+      '.dsp-block[data-kind=llm] .dsp-block-kind{background:var(--dsw-alias-state-success-primary)}',
+      '.dsp-block-title{flex:1;min-width:0;font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary)}',
+      '.dsp-block-testwrap{flex:none;display:flex;align-items:center;gap:8px}',
+      '.dsp-block-toggle{border:0;background:none;padding:4px;cursor:pointer;color:var(--dsw-alias-label-tertiary);display:inline-flex;flex:none}',
+      '.dsp-block-toggle svg{transition:transform .15s ease}',
+      '.dsp-block-toggle[aria-expanded=true] svg{transform:rotate(90deg)}',
+      '.dsp-block-body{padding-top:10px;display:flex;flex-direction:column;gap:10px}',
+      '.dsp-block-body .dsp-sub+.dsp-sub{padding-top:0;border-top:0}',
+      '.dsp-inline-test{display:flex;align-items:center;gap:8px;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);flex-wrap:wrap}',
+      '.dsp-inline-test[data-ok=true] .dsp-inline-text{color:var(--dsw-alias-state-success-primary)}',
+      '.dsp-inline-test[data-ok=false] .dsp-inline-text{color:var(--dsw-alias-state-error-primary)}',
       '@media (max-width:520px){.dsp-grid,.dsp-grid2{grid-template-columns:minmax(0,1fr)}}',
       '.dsp-ind{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:var(--dsw-radius-sm);color:var(--dsw-alias-label-secondary);cursor:default}',
       '.dsp-ind-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--dsw-alias-state-idle-primary)}',
@@ -640,6 +668,74 @@ window.__ModuleLoader__.load({
       ]);
     }
 
+    /** Build a test draft from the current form state (shared by the full test and per-proxy tests). */
+    function draftFromState(state) {
+      const inputMode = state.inputMode.text === 'fields' ? 'fields' : 'url';
+      const draft = {
+        inputMode,
+        remoteDns: state.remoteDns.text !== 'false',
+        mode: MODES.includes(state.mode.text) ? state.mode.text : 'llm',
+        bypassPrivate: state.bypassPrivate.text !== 'false',
+        bypass: state.bypass.text,
+        llmHosts: state.llmHosts.text,
+      };
+      if (state.llmProxy && state.llmProxy.text.trim()) {
+        const parsedLlm = parseProxyInput(state.llmProxy.text);
+        if (parsedLlm) draft.llmProxy = parsedLlm.url;
+      }
+      if (inputMode === 'url') {
+        const parsed = parseProxyInput(state.proxy.text);
+        if (!parsed) return { error: 'invalidProxy' };
+        draft.proxy = parsed.url;
+      } else {
+        draft.proxyType = PROXY_TYPES.includes(state.proxyType.text) ? state.proxyType.text : 'socks5';
+        draft.host = state.host.text.trim();
+        draft.port = state.port.text.trim();
+        draft.username = state.username.text;
+        draft.password = state.password.text;
+      }
+      return { draft };
+    }
+
+    /** Compact per-proxy test button + result, used inside each proxy card. */
+    function InlineTest(props) {
+      const { t, state, testConnection, which } = props;
+      const [busy, setBusy] = useState(false);
+      const [result, setResult] = useState(undefined);
+      const alive = useRef(true);
+      useEffect(() => () => { alive.current = false; }, []);
+      const run = async () => {
+        const built = draftFromState(state);
+        if (built.error) { setResult({ ok: false, code: 'bad-config', message: t(built.error) }); return; }
+        setBusy(true);
+        setResult(undefined);
+        const answer = await testConnection({ config: built.draft });
+        if (!alive.current) return;
+        setBusy(false);
+        if (which === 'llm') {
+          const llmRes = answer && answer.llmUpstream
+            ? answer.llmUpstream
+            : (state.llmProxy && state.llmProxy.text.trim() ? { ok: false, code: 'bad-config', message: t('invalidProxy') } : answer);
+          setResult(llmRes);
+        } else {
+          setResult(answer);
+        }
+      };
+      let text = '';
+      let ok;
+      if (busy) text = t('testing');
+      else if (result) {
+        ok = Boolean(result.ok);
+        text = result.ok
+          ? `${t('test.ok')} · ${TYPE_LABELS[result.type] || 'SOCKS5'} · ${result.totalMs} ms`
+          : (translated(t, `err.${result.code}`, { message: result.message }) || result.message || t('test.fail'));
+      }
+      return h('div', { className: 'dsp-inline-test', 'data-ok': ok === undefined ? undefined : (ok ? 'true' : 'false') }, [
+        h(P.Button, { key: 'b', variant: 'outline', size: 'sm', disabled: busy || !state.available || !state.writable, onClick: run }, busy ? t('testing') : t('testButton')),
+        text ? h('span', { key: 't', className: 'dsp-inline-text' }, text) : null,
+      ]);
+    }
+
     // ---- test section ------------------------------------------------------------------------
     function TestSection(props) {
       const { t, state, testConnection } = props;
@@ -651,38 +747,14 @@ window.__ModuleLoader__.load({
       }, []);
 
       const run = async () => {
-        const inputMode = state.inputMode.text === 'fields' ? 'fields' : 'url';
-        const draft = {
-          inputMode,
-          remoteDns: state.remoteDns.text !== 'false',
-          mode: MODES.includes(state.mode.text) ? state.mode.text : 'llm',
-          bypassPrivate: state.bypassPrivate.text !== 'false',
-          bypass: state.bypass.text,
-          llmHosts: state.llmHosts.text,
-        };
-        if (state.llmProxy.text.trim()) {
-          const parsedLlm = parseProxyInput(state.llmProxy.text);
-          if (parsedLlm) draft.llmProxy = parsedLlm.url;
-        }
-        if (inputMode === 'url') {
-          const parsed = parseProxyInput(state.proxy.text);
-          if (!parsed) {
-            setResult({ ok: false, code: 'bad-config', message: t('invalidProxy') });
-            return;
-          }
-          draft.proxy = parsed.url;
-        } else {
-          Object.assign(draft, {
-            proxyType: PROXY_TYPES.includes(state.proxyType.text) ? state.proxyType.text : 'socks5',
-            host: state.host.text.trim(),
-            port: state.port.text.trim(),
-            username: state.username.text,
-            password: state.password.text,
-          });
+        const built = draftFromState(state);
+        if (built.error) {
+          setResult({ ok: false, code: 'bad-config', message: t(built.error) });
+          return;
         }
         setBusy(true);
         setResult(undefined);
-        const answer = await testConnection({ config: draft });
+        const answer = await testConnection({ config: built.draft });
         if (!alive.current) return;
         setBusy(false);
         setResult(answer);
@@ -827,6 +899,8 @@ window.__ModuleLoader__.load({
       const { t } = props;
       const state = props.useSocksProxyForm((s) => s);
       const [advanced, setAdvanced] = useState(false);
+      const [dshOpen, setDshOpen] = useState(true);
+      const [llmOpen, setLlmOpen] = useState(true);
       if (props.view === 'summary') return t('description');
 
       const disabled = !state.writable || state.saving;
@@ -897,37 +971,38 @@ window.__ModuleLoader__.load({
                 : null,
             ];
 
-      const llmProxyFilled = state.llmProxy.text.trim() !== '';
-      const primaryLabel = dshOn ? t('dshProxyTitle') : t('primaryForLlm');
-      const primaryBlock = h('div', { key: 'primary', className: 'dsp-nested' }, [
-        h(FieldHead, { key: 'head', t, label: primaryLabel, htmlFor: inputMode === 'url' ? 'plugin-config-socks-proxy-proxy' : undefined }, [
-          h(P.SegmentedControl, {
-            key: 'seg',
-            id: 'plugin-config-socks-proxy-input',
-            label: t('server'),
-            value: inputMode,
-            disabled,
-            options: INPUT_MODES.map((m) => ({ value: m, label: t(`inputMode.${m}`) })),
-            onChange: (value) => edit('inputMode', value),
-          }),
+      const primaryBlock = h('div', { key: 'dshblock', className: 'dsp-block', 'data-kind': 'dsh', 'data-off': dshOn ? 'false' : 'true' }, [
+        h('div', { key: 'bh', className: 'dsp-block-head' }, [
+          h('span', { key: 'k', className: 'dsp-block-kind' }, t('tag.dsh')),
+          h('span', { key: 'tt', className: 'dsp-block-title' }, t('dshProxyTitle')),
+          h('div', { key: 'test', className: 'dsp-block-testwrap' }, h(InlineTest, { t, state, testConnection: props.testConnection, which: 'primary' })),
+          h('button', { key: 'c', type: 'button', className: 'dsp-block-toggle', 'aria-expanded': dshOpen, title: dshOpen ? t('collapse') : t('expand'), onClick: () => setDshOpen(!dshOpen) }, h(ChevronIcon)),
         ]),
-        ...serverBody,
-        h('p', { key: 'note', className: 'dsp-note' }, [h(LockIcon, { key: 'i' }), h('span', { key: 't' }, t('passwordNote'))]),
+        dshOpen ? h('div', { key: 'b', className: 'dsp-block-body' }, [
+          h(P.SegmentedControl, { key: 'seg', id: 'plugin-config-socks-proxy-input', label: t('server'), value: inputMode, disabled, options: INPUT_MODES.map((m) => ({ value: m, label: t(`inputMode.${m}`) })), onChange: (value) => edit('inputMode', value) }),
+          ...serverBody,
+          h('p', { key: 'note', className: 'dsp-note' }, [h(LockIcon, { key: 'i' }), h('span', { key: 't' }, t('passwordNote'))]),
+        ]) : null,
       ]);
-      const llmBlock = h('div', { key: 'llmproxy', className: 'dsp-nested' }, [
-        h(TextRow, { key: 'lp', ...common, name: 'llmProxy', field: state.llmProxy, placeholder: t('proxyPlaceholder') }),
+
+      const llmBlock = h('div', { key: 'llmblock', className: 'dsp-block', 'data-kind': 'llm', 'data-off': llmOn ? 'false' : 'true' }, [
+        h('div', { key: 'bh', className: 'dsp-block-head' }, [
+          h('span', { key: 'k', className: 'dsp-block-kind' }, t('tag.llm')),
+          h('span', { key: 'tt', className: 'dsp-block-title' }, t('llmProxyTitle')),
+          h('div', { key: 'test', className: 'dsp-block-testwrap' }, h(InlineTest, { t, state, testConnection: props.testConnection, which: 'llm' })),
+          h('button', { key: 'c', type: 'button', className: 'dsp-block-toggle', 'aria-expanded': llmOpen, title: llmOpen ? t('collapse') : t('expand'), onClick: () => setLlmOpen(!llmOpen) }, h(ChevronIcon)),
+        ]),
+        llmOpen ? h('div', { key: 'b', className: 'dsp-block-body' }, [
+          h(TextRow, { key: 'lp', ...common, name: 'llmProxy', field: state.llmProxy, placeholder: t('proxyPlaceholder') }),
+        ]) : null,
       ]);
+
       const modeSection = h('div', { key: 'mode', className: 'dsp-field' }, [
         h('div', { key: 'head', className: 'dsp-head' }, h('label', { className: 'dsp-label' }, t('proxyFor'))),
-        h('div', { key: 'dshwrap', className: 'dsp-nested' }, [
-          h(ToggleRow, { key: 'dsh', label: t('proxyFor.dsh'), hint: t('proxyFor.dshHint'), field: { text: dshOn ? 'true' : 'false' }, disabled, onChange: (checked) => setRouting(checked, llmOn) }),
-          dshOn ? primaryBlock : null,
-        ]),
-        h('div', { key: 'llmwrap', className: 'dsp-nested' }, [
-          h(ToggleRow, { key: 'llm', label: t('proxyFor.llm'), hint: t('proxyFor.llmHint'), field: { text: llmOn ? 'true' : 'false' }, disabled, onChange: (checked) => setRouting(dshOn, checked) }),
-          (!dshOn && llmOn && !llmProxyFilled) ? primaryBlock : null,
-          llmOn ? llmBlock : null,
-        ]),
+        h(ToggleRow, { key: 'dsh', label: t('proxyFor.dsh'), hint: t('proxyFor.dshHint'), field: { text: dshOn ? 'true' : 'false' }, disabled, onChange: (checked) => setRouting(checked, llmOn) }),
+        primaryBlock,
+        h(ToggleRow, { key: 'llm', label: t('proxyFor.llm'), hint: t('proxyFor.llmHint'), field: { text: llmOn ? 'true' : 'false' }, disabled, onChange: (checked) => setRouting(dshOn, checked) }),
+        llmBlock,
         h('p', { key: 'desc', className: 'dsp-hint' }, `${t('modeHint')} ${t('bothOnHint')}`),
       ]);
 
