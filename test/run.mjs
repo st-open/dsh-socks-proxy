@@ -168,6 +168,25 @@ await test('config parses socks5h URL with credentials', () => {
   assert.equal(normalizeConfig({ mode: 'bogus' }).mode, 'llm')
 })
 
+await test('schema 2: dsh / llm / global slots fold into the router shape', () => {
+  const shape = (raw) => {
+    const c = normalizeConfig({ schema: 2, ...raw })
+    return [c.mode, c.socks.host, c.llmSocks?.host]
+  }
+  assert.deepEqual(shape({}), ['off', '127.0.0.1', undefined])
+  assert.deepEqual(shape({ globalProxy: 'http://g:1' }), ['all', 'g', undefined])
+  assert.deepEqual(shape({ dshProxy: 'http://a:1' }), ['dsh', 'a', undefined])
+  assert.deepEqual(shape({ llmProxy: 'http://b:1' }), ['llm', 'b', undefined])
+  assert.deepEqual(shape({ dshProxy: 'http://a:1', llmProxy: 'http://b:1' }), ['all', 'a', 'b'])
+  assert.deepEqual(shape({ globalProxy: 'http://g:1', llmProxy: 'http://b:1' }), ['all', 'g', 'b'])
+  assert.deepEqual(shape({ globalProxy: 'http://g:1', dshProxy: 'http://a:1' }), ['all', 'a', 'g'])
+  assert.deepEqual(shape({ globalProxy: 'http://g:1', dshProxy: 'http://g:1', llmProxy: 'http://g:1' }), ['all', 'g', undefined])
+  assert.deepEqual(Object.keys(normalizeConfig({ schema: 2, dshProxy: 'http://a:1', globalProxy: 'http://g:1' }).slots).sort(), ['dsh', 'global'])
+  assert.throws(() => normalizeConfig({ schema: 2, dshProxy: 'not a proxy' }), /dshProxy/)
+  // a schema-1 config keeps its old meaning
+  assert.equal(normalizeConfig({ mode: 'dsh', proxy: 'http://x:9' }).slots, undefined)
+})
+
 await test('host matching', () => {
   assert.ok(matchesHostList(['example.com'], 'api.example.com', '443'))
   assert.ok(!matchesHostList(['example.com'], 'badexample.com', '443'))

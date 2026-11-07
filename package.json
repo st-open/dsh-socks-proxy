@@ -1,6 +1,6 @@
 {
   "name": "@st-open/dsh-socks-proxy",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "private": true,
   "type": "module",
   "description": "Route DeepSeek Harness outbound traffic through a SOCKS5 or HTTP(S) proxy: LLM API only, or all DSH traffic.",
@@ -21,7 +21,6 @@
     "locale/*.json",
     "icon.svg",
     "cordis.patch.yml",
-    "docs/*.svg",
     "README.md",
     "README.en.md",
     "LICENSE"

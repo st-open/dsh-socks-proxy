@@ -5,7 +5,7 @@
  * profile's cordis.patch.yml. `mode`, `proxy`, `bypassPrivate`, `bypass` and `llmHosts` are
  * volatile: saving them re-routes traffic immediately, no restart needed.
  */
-import { normalizeConfig } from './lib/config.js'
+import { normalizeConfig, SLOT_NAMES } from './lib/config.js'
 import { describeUpstream } from './lib/dial.js'
 import { importHostPackage } from './lib/host-modules.js'
 import { installSocksRouting } from './lib/install.js'
@@ -50,6 +50,11 @@ export const Config = Schema
       // Dedicated LLM upstream (optional): LLM hosts use llmProxy; other proxied hosts keep `proxy`.
       llmProxyEnabled: Schema.boolean().default(false).volatile(),
       llmProxy: Schema.string().default('').volatile(),
+      // Schema 2 (current): three proxy slots, each an address; a filled slot switches its traffic on.
+      //   dshProxy = DSH itself, llmProxy = LLM API, globalProxy = default for whichever of the two has none.
+      schema: Schema.number().default(1).volatile(),
+      dshProxy: Schema.string().default('').volatile(),
+      globalProxy: Schema.string().default('').volatile(),
       providers: hostList(),
       builtinHosts: Schema.boolean().default(true),
       exportToChildren: Schema.boolean().default(true),
@@ -111,17 +116,31 @@ export function apply(ctx, rawConfig) {
       return Response.json({ ok: false, stage: 'config', code: 'bad-config', message: error.message })
     }
     try {
-      const socks = await probeSocks(config.socks)
-      logger.info(`socks-proxy: test ${describeUpstream(config.socks)} -> ${socks.ok ? `ok (auth ${socks.auth}, ${socks.totalMs} ms)` : `${socks.code}: ${socks.message}`}`)
-      const result = { ...socks }
-      // Probe the dedicated LLM upstream as well, so the page can report it separately.
-      if (config.llmProxyEnabled && config.llmSocks) {
-        try {
-          const llm = await probeSocks(config.llmSocks)
-          result.llmUpstream = { ...llm }
-          logger.info(`socks-proxy: test llm-upstream ${describeUpstream(config.llmSocks)} -> ${llm.ok ? `ok (${llm.totalMs} ms)` : `${llm.code}: ${llm.message}`}`)
-        } catch (error) {
-          result.llmUpstream = { ok: false, code: 'internal', message: String(error?.message ?? error) }
+      const result = { ok: true }
+      if (config.slots) {
+        // Schema 2: probe every filled slot on its own so the page can mark each one.
+        result.slots = {}
+        for (const slot of SLOT_NAMES) {
+          const upstream = config.slots[slot]
+          if (!upstream) continue
+          const probe = await probeSocks(upstream)
+          result.slots[slot] = probe
+          if (!probe.ok) result.ok = false
+          logger.info(`socks-proxy: test ${slot} ${describeUpstream(upstream)} -> ${probe.ok ? `ok (auth ${probe.auth}, ${probe.totalMs} ms)` : `${probe.code}: ${probe.message}`}`)
+        }
+        if (!Object.keys(result.slots).length) return Response.json({ ok: false, stage: 'config', code: 'no-proxy', message: 'no proxy filled in' })
+      } else {
+        const socks = await probeSocks(config.socks)
+        logger.info(`socks-proxy: test ${describeUpstream(config.socks)} -> ${socks.ok ? `ok (auth ${socks.auth}, ${socks.totalMs} ms)` : `${socks.code}: ${socks.message}`}`)
+        Object.assign(result, socks)
+        // Probe the dedicated LLM upstream as well, so the page can report it separately.
+        if (config.llmProxyEnabled && config.llmSocks) {
+          try {
+            const llm = await probeSocks(config.llmSocks)
+            result.llmUpstream = { ...llm }
+          } catch (error) {
+            result.llmUpstream = { ok: false, code: 'internal', message: String(error?.message ?? error) }
+          }
         }
       }
       // Also check every configured model endpoint the way these settings would reach it.
@@ -129,6 +148,8 @@ export function apply(ctx, rawConfig) {
         try {
           const llmHosts = createLlmHostSource(getLoader, config)
           result.endpoints = await probeEndpoints(config, providerEndpoints(getLoader, config), llmHosts)
+          // Which slot carried each proxied model endpoint (schema 2): the LLM slot, else the global one.
+          if (config.slots) for (const e of result.endpoints) if (e.via === 'proxy') e.slot = config.slots.llm ? 'llm' : 'global'
           for (const e of result.endpoints) logger.info(`socks-proxy: endpoint ${e.route} ${e.baseURL} via ${e.via} -> ${e.ok ? `ok ${e.ms} ms` : `${e.code}: ${e.message}`}`)
         } catch (error) {
           result.endpointsError = String(error?.message ?? error)
@@ -169,6 +190,8 @@ export function apply(ctx, rawConfig) {
                 ok: true,
                 mode: c.mode,
                 enabled: c.mode !== 'off',
+                dsh: c.mode === 'dsh' || c.mode === 'all',
+                llm: c.mode === 'llm' || c.mode === 'all',
                 upstream: describeUpstream(c.socks),
                 secondEnabled: Boolean(c.secondEnabled),
                 llmProxyEnabled: Boolean(c.llmProxyEnabled),
