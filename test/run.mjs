@@ -442,12 +442,15 @@ await test('mode=all + dedicated LLM proxy: LLM host via llmProxy, other hosts v
   }
 })
 
-await test('dedicated LLM proxy disabled/empty does not change routing', async () => {
-  const a = normalizeConfig({ mode: 'all', proxy: 'socks5h://127.0.0.1:7890', llmProxyEnabled: false, llmProxy: 'socks5h://127.0.0.1:1' })
-  assert.equal(a.llmProxyEnabled, false)
-  assert.equal(a.llmSocks, undefined)
-  const b = normalizeConfig({ mode: 'all', proxy: 'socks5h://127.0.0.1:7890', llmProxyEnabled: true, llmProxy: '' })
+await test('LLM upstream is derived from the llmProxy text (empty = primary)', async () => {
+  const a = normalizeConfig({ mode: 'all', proxy: 'socks5h://127.0.0.1:7890', llmProxy: 'socks5h://127.0.0.1:1' })
+  assert.equal(a.llmProxyEnabled, true)
+  assert.ok(a.llmSocks && a.llmSocks.port === 1)
+  const b = normalizeConfig({ mode: 'all', proxy: 'socks5h://127.0.0.1:7890', llmProxy: '' })
   assert.equal(b.llmProxyEnabled, false)
+  assert.equal(b.llmSocks, undefined)
+  const c = normalizeConfig({ mode: 'all', proxy: 'socks5h://127.0.0.1:7890' })
+  assert.equal(c.llmProxyEnabled, false)
 })
 
 // ---- integration: all mode -------------------------------------------------------------------

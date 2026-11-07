@@ -12,7 +12,7 @@ window.__ModuleLoader__.load({
     const TEST_ROUTE = 'api/socks-proxy/test';
     const STATE_ROUTE = 'api/socks-proxy/state';
     /** Shown in the panel so a stale (cached) page is obvious. Keep in sync with package.json. */
-    const PANEL_VERSION = '0.10.0';
+    const PANEL_VERSION = '0.11.0';
     const NS = 'socksProxy';
     const MODES = ['off', 'llm', 'dsh', 'all'];
     const INPUT_MODES = ['url', 'fields'];
@@ -22,7 +22,7 @@ window.__ModuleLoader__.load({
 
     const zh = {
       title: '代理（SOCKS5 / HTTP）',
-      description: '让 DSH 的出站流量走 SOCKS5 或 HTTP 代理：只代理大模型 API，或代理 DSH 的全部流量。',
+      description: '让 DSH 走代理：分别控制「DSH 自身」和「大模型」是否走代理，并可为大模型单独指定一条代理。',
       mode: '代理模式',
       'mode.off': '关闭',
       'mode.llm': '仅大模型',
@@ -77,10 +77,15 @@ window.__ModuleLoader__.load({
       llmHosts: '额外的大模型主机',
       llmHostsHint: '仅「仅大模型」模式使用，逗号分隔。模型设置里的接口地址已自动包含。',
       llmProxyEnabled: '大模型走独立代理',
-      llmProxyEnabledHint: '为大模型单独指定一条代理：大模型走这条，其余流量仍走上面的主代理。适合「DSH 走 Clash、大模型走另一个代理」的场景（建议配合「全部流量」模式）。',
+      llmProxyEnabledHint: '大模型单独走这条代理；留空则用上面的主代理。',
       llmProxy: '大模型代理地址',
-      llmProxyHint: '与主代理同格式：socks5://、http(s):// 地址或 curl / export 命令。留空则不启用。',
+      llmProxyHint: '可选。填了就大模型单独走这条，留空则大模型也用上面的主代理。格式同主代理。',
       'test.llmUpstream': '大模型代理',
+      proxyFor: '代理开关',
+      'proxyFor.dsh': 'DSH 自己的流量走代理',
+      'proxyFor.dshHint': '网页搜索、网页抓取、MCP、终端命令等 DSH 自身的联网。',
+      'proxyFor.llm': '大模型流量走代理',
+      'proxyFor.llmHint': '你模型设置里的各大模型接口地址。',
       'indicator.label': '代理',
       'indicator.on': '代理已开启：{mode}',
       'indicator.off': '代理已关闭',
@@ -128,7 +133,7 @@ window.__ModuleLoader__.load({
     };
     const en = {
       title: 'Proxy (SOCKS5 / HTTP)',
-      description: "Route DSH's outbound traffic through a SOCKS5 or HTTP proxy: LLM API requests only, or all DSH traffic.",
+      description: "Proxy DSH's traffic: switch on DSH itself and/or the LLM independently, and give the LLM its own proxy if you want.",
       mode: 'Proxy mode',
       'mode.off': 'Off',
       'mode.llm': 'LLM only',
@@ -183,10 +188,15 @@ window.__ModuleLoader__.load({
       llmHosts: 'Extra LLM hosts',
       llmHostsHint: 'LLM-only mode, comma separated. Endpoints from your model settings are already included.',
       llmProxyEnabled: 'Separate proxy for LLM',
-      llmProxyEnabledHint: 'Give the LLM its own proxy: LLM hosts use this one, all other traffic keeps the primary proxy above. For "DSH via Clash, LLM via another proxy" (use with All traffic mode).',
+      llmProxyEnabledHint: 'Send the LLM through this proxy; empty reuses the primary proxy.',
       llmProxy: 'LLM proxy address',
-      llmProxyHint: 'Same formats as the primary: socks5://, http(s)://, or a curl / export command. Empty disables it.',
+      llmProxyHint: 'Optional. If set, the LLM uses this proxy; empty reuses the primary proxy above. Same formats as the primary.',
       'test.llmUpstream': 'LLM proxy',
+      proxyFor: 'Proxy switches',
+      'proxyFor.dsh': "DSH's own traffic uses a proxy",
+      'proxyFor.dshHint': 'DSH itself: web search, web fetch, MCP, terminal commands.',
+      'proxyFor.llm': 'LLM traffic uses a proxy',
+      'proxyFor.llmHint': 'The model endpoints from your model settings.',
       'indicator.label': 'Proxy',
       'indicator.on': 'Proxy on: {mode}',
       'indicator.off': 'Proxy off',
@@ -366,7 +376,6 @@ window.__ModuleLoader__.load({
       boolField('bypassPrivate'),
       { field: 'bypass', format: listFormat, parse: listParse },
       { field: 'llmHosts', format: listFormat, parse: listParse },
-      { field: 'llmProxyEnabled', format: (v) => (v === 'true' || v === true ? 'true' : 'false'), parse: (text) => ({ kind: 'set', value: text === 'true' ? 'true' : 'false' }) },
       {
         field: 'llmProxy',
         format: str,
@@ -620,9 +629,8 @@ window.__ModuleLoader__.load({
           bypassPrivate: state.bypassPrivate.text !== 'false',
           bypass: state.bypass.text,
           llmHosts: state.llmHosts.text,
-          llmProxyEnabled: state.llmProxyEnabled.text === 'true',
         };
-        if (draft.llmProxyEnabled && state.llmProxy.text.trim()) {
+        if (state.llmProxy.text.trim()) {
           const parsedLlm = parseProxyInput(state.llmProxy.text);
           if (parsedLlm) draft.llmProxy = parsedLlm.url;
         }
@@ -787,6 +795,9 @@ window.__ModuleLoader__.load({
 
       const disabled = !state.writable || state.saving;
       const mode = MODES.includes(state.mode.text) ? state.mode.text : 'llm';
+      const dshOn = mode === 'dsh' || mode === 'all';
+      const llmOn = mode === 'llm' || mode === 'all';
+      const setRouting = (dsh, llm) => edit('mode', dsh && llm ? 'all' : dsh ? 'dsh' : llm ? 'llm' : 'off');
       const inputMode = state.inputMode.text === 'fields' ? 'fields' : 'url';
       const proxyType = PROXY_TYPES.includes(state.proxyType.text) ? state.proxyType.text : 'socks5';
       const edit = props.edit;
@@ -796,18 +807,12 @@ window.__ModuleLoader__.load({
       const showParsed = parsed && parsed.url !== state.proxy.text.trim();
 
       const modeSection = h('div', { key: 'mode', className: 'dsp-field' }, [
-        h(FieldHead, { key: 'head', t, label: t('mode'), field: state.mode, disabled, onReset: () => props.resetField('mode') }),
-        h(P.SegmentedControl, {
-          key: 'seg',
-          id: 'plugin-config-socks-proxy-mode',
-          className: 'dsp-segment',
-          label: t('mode'),
-          value: mode,
-          disabled,
-          options: MODES.map((m) => ({ value: m, label: t(`mode.${m}`) })),
-          onChange: (value) => edit('mode', value),
-        }),
-        h('p', { key: 'desc', className: 'dsp-hint' }, `${t(`modeDesc.${mode}`)} ${t('modeHint')}`),
+        h('div', { key: 'head', className: 'dsp-head' }, h('label', { className: 'dsp-label' }, t('proxyFor'))),
+        h('div', { key: 'sw', className: 'dsp-nested' }, [
+          h(ToggleRow, { key: 'dsh', label: t('proxyFor.dsh'), hint: t('proxyFor.dshHint'), field: { text: dshOn ? 'true' : 'false' }, disabled, onChange: (checked) => setRouting(checked, llmOn) }),
+          h(ToggleRow, { key: 'llm', label: t('proxyFor.llm'), hint: t('proxyFor.llmHint'), field: { text: llmOn ? 'true' : 'false' }, disabled, onChange: (checked) => setRouting(dshOn, checked) }),
+        ]),
+        h('p', { key: 'desc', className: 'dsp-hint' }, t('modeHint')),
       ]);
 
       const serverBody =
@@ -887,16 +892,9 @@ window.__ModuleLoader__.load({
           ? h('div', { key: 'body', className: 'dsp-nested' }, [
               h(ToggleRow, { key: 'bp', label: t('bypassPrivate'), hint: t('bypassPrivateHint'), field: state.bypassPrivate, disabled, onChange: (checked) => edit('bypassPrivate', checked ? 'true' : 'false') }),
               h(TextRow, { key: 'bypass', ...common, name: 'bypass', field: state.bypass, placeholder: 'corp.example.com, 192.168.1.50' }),
-              mode === 'llm' ? h(TextRow, { key: 'llm', ...common, name: 'llmHosts', field: state.llmHosts, placeholder: 'api.example.com' }) : null,
-              // Dedicated LLM proxy: meaningful when LLM traffic is proxied (llm + all modes).
-              (mode === 'all' || mode === 'llm')
-                ? h('div', { key: 'llmproxy', className: 'dsp-nested' }, [
-                    h(ToggleRow, { key: 'en', label: t('llmProxyEnabled'), hint: t('llmProxyEnabledHint'), field: state.llmProxyEnabled, disabled, onChange: (checked) => edit('llmProxyEnabled', checked ? 'true' : 'false') }),
-                    state.llmProxyEnabled.text === 'true'
-                      ? h(TextRow, { key: 'lp', ...common, name: 'llmProxy', field: state.llmProxy, placeholder: t('proxyPlaceholder') })
-                      : null,
-                  ])
-                : null,
+              llmOn ? h(TextRow, { key: 'llm', ...common, name: 'llmHosts', field: state.llmHosts, placeholder: 'api.example.com' }) : null,
+              // Optional dedicated LLM proxy: fill it to send the LLM elsewhere; empty uses the primary proxy.
+              llmOn ? h(TextRow, { key: 'lp', ...common, name: 'llmProxy', field: state.llmProxy, placeholder: t('proxyPlaceholder') }) : null,
             ])
           : null,
       ]);

@@ -10,15 +10,14 @@ Route DeepSeek Harness (DSH) internet traffic through a proxy. Supports **SOCKS5
 
 Maybe your computer can reach the LLM but not GitHub/Google — or the other way round. This plugin decides **which requests use a proxy and which stay direct**.
 
-## Three modes (pick one)
+## Two switches (turn on what you need)
 
-| Mode | Through the proxy | Direct |
-|---|---|---|
-| **LLM only** | LLM API requests | everything else |
-| **DSH only** | DSH's own traffic: web pages, search, terminal commands | LLM |
-| **All traffic** | everything (LLM + DSH) | nothing |
+| Switch | When on |
+|---|---|
+| **DSH's own traffic uses a proxy** | DSH itself (web search, web fetch, MCP, terminal commands) goes through the primary proxy |
+| **LLM traffic uses a proxy** | LLM API goes through a proxy; if a **LLM proxy address** is set it uses that, otherwise the primary proxy |
 
-> In short: **All traffic = LLM only + DSH only**.
+Both off = no proxy; one on = only that kind is proxied; both on = each uses its own (possibly different) proxy.
 
 ## Install
 
@@ -43,9 +42,9 @@ Not sure it works? Click **Test connection** first.
 
 ## Want "DSH via A, LLM via B"?
 
-1. Mode: **All traffic**.
-2. **Proxy server**: A.
-3. Open **Advanced → Separate proxy for LLM**, fill in B.
+1. Turn on **both** switches (DSH's own traffic, and LLM traffic).
+2. **Proxy server**: A (for DSH).
+3. Advanced → **LLM proxy address**: B.
 
 Example: DSH via local Clash `http://127.0.0.1:7897`, LLM via `socks5h://user:pass@10.0.0.1:1080`.
 
