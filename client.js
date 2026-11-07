@@ -12,7 +12,7 @@ window.__ModuleLoader__.load({
     const TEST_ROUTE = 'api/socks-proxy/test';
     const STATE_ROUTE = 'api/socks-proxy/state';
     /** Shown in the panel so a stale (cached) page is obvious. Keep in sync with package.json. */
-    const PANEL_VERSION = '0.11.0';
+    const PANEL_VERSION = '0.11.1';
     const NS = 'socksProxy';
     const MODES = ['off', 'llm', 'dsh', 'all'];
     const INPUT_MODES = ['url', 'fields'];
@@ -87,6 +87,19 @@ window.__ModuleLoader__.load({
       'proxyFor.llm': '大模型流量走代理',
       'proxyFor.llmHint': '你模型设置里的各大模型接口地址。',
       'indicator.label': '代理',
+      'state.off': '代理未开启',
+      'state.error': '代理状态未知',
+      'state.dsh': '已开启 · DSH 代理',
+      'state.llm': '已开启 · 大模型代理',
+      'state.all': '已开启 · 全部代理（同一条代理）',
+      'state.split': '已开启 · DSH + 大模型代理（各自代理）',
+      'short.off': '未开代理',
+      'short.error': '状态未知',
+      'short.dsh': 'DSH 代理',
+      'short.llm': '大模型代理',
+      'short.all': '全部代理',
+      'short.split': 'DSH + 大模型',
+      bothOnHint: '两个都开时：填了「大模型代理地址」= 各自走各自代理；留空 = 都走同一条主代理。',
       'indicator.on': '代理已开启：{mode}',
       'indicator.off': '代理已关闭',
       'indicator.error': '代理状态未知',
@@ -198,6 +211,19 @@ window.__ModuleLoader__.load({
       'proxyFor.llm': 'LLM traffic uses a proxy',
       'proxyFor.llmHint': 'The model endpoints from your model settings.',
       'indicator.label': 'Proxy',
+      'state.off': 'Proxy off',
+      'state.error': 'Proxy state unknown',
+      'state.dsh': 'On · DSH proxy',
+      'state.llm': 'On · LLM proxy',
+      'state.all': 'On · all traffic via one proxy',
+      'state.split': 'On · DSH + LLM via separate proxies',
+      'short.off': 'Proxy off',
+      'short.error': 'Unknown',
+      'short.dsh': 'DSH proxy',
+      'short.llm': 'LLM proxy',
+      'short.all': 'All traffic',
+      'short.split': 'DSH + LLM',
+      bothOnHint: 'Both on: a filled LLM proxy = each uses its own; empty = both use the same primary proxy.',
       'indicator.on': 'Proxy on: {mode}',
       'indicator.off': 'Proxy off',
       'indicator.error': 'Proxy state unknown',
@@ -776,13 +802,19 @@ window.__ModuleLoader__.load({
       }, []);
       if (!state) return null;
       const ok = state.ok !== false;
-      const on = ok && Boolean(state.enabled);
+      const enabled = ok && Boolean(state.enabled);
       const mode = ok ? String(state.mode || 'off') : 'off';
-      const modeLabel = translated(t, `indicator.mode.${mode}`) || mode;
-      const title = !ok ? t('indicator.error') : on ? fill(t('indicator.on'), { mode: modeLabel }) : t('indicator.off');
-      return h('div', { className: 'dsp-ind', 'data-on': on ? 'true' : 'false', 'data-err': ok ? 'false' : 'true', title, role: 'status', 'aria-label': title }, [
+      let kind = 'off';
+      if (!ok) kind = 'error';
+      else if (!enabled) kind = 'off';
+      else if (mode === 'dsh') kind = 'dsh';
+      else if (mode === 'llm') kind = 'llm';
+      else if (mode === 'all') kind = state.llmProxyEnabled ? 'split' : 'all';
+      const title = translated(t, `state.${kind}`) || t('state.error');
+      const shortText = translated(t, `short.${kind}`) || t('indicator.label');
+      return h('div', { className: 'dsp-ind', 'data-on': enabled ? 'true' : 'false', 'data-err': ok ? 'false' : 'true', title, role: 'status', 'aria-label': title }, [
         h('span', { key: 'd', className: 'dsp-ind-dot' }),
-        props.wide ? h('span', { key: 't', className: 'dsp-ind-txt' }, t('indicator.label')) : null,
+        props.wide ? h('span', { key: 't', className: 'dsp-ind-txt' }, shortText) : null,
       ]);
     }
 
@@ -812,7 +844,7 @@ window.__ModuleLoader__.load({
           h(ToggleRow, { key: 'dsh', label: t('proxyFor.dsh'), hint: t('proxyFor.dshHint'), field: { text: dshOn ? 'true' : 'false' }, disabled, onChange: (checked) => setRouting(checked, llmOn) }),
           h(ToggleRow, { key: 'llm', label: t('proxyFor.llm'), hint: t('proxyFor.llmHint'), field: { text: llmOn ? 'true' : 'false' }, disabled, onChange: (checked) => setRouting(dshOn, checked) }),
         ]),
-        h('p', { key: 'desc', className: 'dsp-hint' }, t('modeHint')),
+        h('p', { key: 'desc', className: 'dsp-hint' }, `${t('modeHint')} ${t('bothOnHint')}`),
       ]);
 
       const serverBody =
